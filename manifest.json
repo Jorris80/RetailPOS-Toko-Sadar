@@ -1,0 +1,21 @@
+{
+  "name": "Retail POS Enterprise",
+  "short_name": "Retail POS",
+  "description": "Kasir multi-cabang berbasis Google Sheets dengan mode offline",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "lang": "id",
+  "background_color": "#0b1220",
+  "theme_color": "#059669",
+  "categories": ["business", "finance", "productivity"],
+  "icons": [
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Kasir", "url": "./?v=pos", "icons": [{ "src": "icon-512.png", "sizes": "512x512" }] }
+  ]
+}
