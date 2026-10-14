@@ -1,6 +1,6 @@
 /* Retail POS Enterprise — Service Worker (mode offline PWA)
  * Naikkan VERSION setiap kali index.html diperbarui agar perangkat kasir mengambil versi baru. */
-var VERSION = 'rpos-v1.0.0';
+var VERSION = 'rpos-v1.0.1';
 var SHELL = ['./', './index.html', './manifest.json', './offline.html', './icon-512.png'];
 var CDN = ['https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js'];
 

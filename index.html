@@ -431,7 +431,7 @@ function RPOS_calcCart(cart, ctx) {
 <script>
 /* ===================== Retail POS Enterprise — Klien (inti) ===================== */
 'use strict';
-var APP_VERSION = '1.0.0';
+var APP_VERSION = '1.0.1';
 var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 
 /* ---------- Utilitas ---------- */
@@ -1841,7 +1841,7 @@ VIEWS.products = function (el) {
   el.innerHTML = '<div class="row wrap mb"><input class="input grow" id="pq" placeholder="Cari nama, SKU, barcode" value="' + esc(f.q) + '" style="min-width:200px">' +
     '<select class="input" id="pc" style="width:auto">' + opts([{ id: 'ALL', name: 'Semua kategori' }].concat(st.boot.categories), f.cat) + '</select>' +
     '<select class="input" id="ps" style="width:auto">' + opts([{ id: 'ACTIVE', name: 'Aktif' }, { id: 'ALL', name: 'Semua' }, { id: 'LOW', name: 'Stok menipis' }, { id: 'INACTIVE', name: 'Nonaktif' }], f.status) + '</select></div>' +
-    '<div class="row wrap mb">' + (manage ? '<button class="btn primary" onclick="editProduct()">' + ic('plus') + 'Produk</button><button class="btn" onclick="importProducts()">' + ic('upload') + 'Impor CSV</button><button class="btn" onclick="editCategories()">Kategori</button>' : '') +
+    '<div class="row wrap mb">' + (manage ? '<button class="btn primary" onclick="editProduct()">' + ic('plus') + 'Produk</button><button class="btn" onclick="importProducts()">' + ic('upload') + 'Impor CSV</button><button class="btn" onclick="editCategories()">Kategori</button><button class="btn" onclick="manageUnits()">Satuan</button>' : '') +
     (hasFeat('export') ? '<button class="btn" onclick="exportProducts()">' + ic('download') + 'Ekspor CSV</button>' : '') +
     '<button class="btn" onclick="printLabels()">' + ic('printer') + 'Cetak Label Barcode</button></div><div id="plist"></div>';
   var draw = function () {
@@ -1876,7 +1876,7 @@ function editProduct(id) {
       '<label class="f">Barcode utama<div class="row"><input class="input mono" name="barcode" value="' + esc(p.barcode || '') + '"><button type="button" class="btn icon" id="pScan">' + ic('scan') + '</button></div></label>' +
       '<label class="f">Barcode lain (pisah koma)<input class="input mono" name="barcodes" value="' + esc(p.barcodes || '') + '" placeholder="mis. kemasan dus"></label></div>' +
       '<div class="grid3"><label class="f">Kategori<select class="input" name="categoryId">' + opts(st.boot.categories, p.categoryId, 'id', 'name', '— pilih —') + '</select></label>' +
-      '<label class="f">Satuan<input class="input" name="unit" value="' + esc(p.unit || 'PCS') + '" list="unitList"><datalist id="unitList">' + ['PCS', 'BTL', 'PCH', 'SAK', 'KG', 'LTR', 'PAK', 'DUS', 'KLG', 'BOX'].map(function (u) { return '<option value="' + u + '">'; }).join('') + '</datalist></label>' +
+      '<label class="f">Satuan<div class="row"><select class="input" name="unit" id="pUnit">' + unitOptions(p.unit || 'PCS') + '</select><button type="button" class="btn icon" id="pUnitMg" title="Kelola daftar satuan">' + ic('edit', 'sm') + '</button></div></label>' +
       '<label class="f">Stok minimum (peringatan)<input class="input" name="minStock" type="number" step="any" value="' + (p.minStock || 0) + '"></label></div>' +
       '<div class="grid3"><label class="f">HPP / harga modal<input class="input" name="cost" inputmode="numeric" data-num value="' + (p.cost || 0) + '"></label>' +
       '<label class="f">Harga jual<input class="input" name="price" inputmode="numeric" data-num value="' + (p.price || '') + '" required></label>' +
@@ -1889,6 +1889,13 @@ function editProduct(id) {
   var mg = function () { var d = formData(m.$('#pf')); var g = d.price - d.cost; m.$('#pMargin').textContent = d.price ? 'Margin ' + rp(g) + ' (' + (Math.round(g / d.price * 1000) / 10) + '% dari harga jual)' : ''; };
   m.$$('[name=price],[name=cost]').forEach(function (i) { i.oninput = mg; }); mg();
   m.$('#pScan').onclick = function () { openScanner(function (code) { m.$('[name=barcode]').value = code; }); };
+  var unitSel = m.$('#pUnit'), lastUnit = unitSel.value;
+  unitSel.onchange = function () {
+    if (unitSel.value !== '__new') { lastUnit = unitSel.value; return; }
+    unitSel.value = lastUnit;
+    addUnit().then(function (u) { if (u) { unitSel.innerHTML = unitOptions(u); lastUnit = u; } });
+  };
+  m.$('#pUnitMg').onclick = function () { manageUnits().then(function () { unitSel.innerHTML = unitOptions(unitSel.value === '__new' ? lastUnit : unitSel.value); }); };
   m.$('#pSave').onclick = function () {
     var d = formData(m.$('#pf'));
     if (!d.name || !d.price) return toast('Nama dan harga jual wajib', 'bad');
@@ -1907,6 +1914,70 @@ function editProduct(id) {
     });
   };
 }
+/* ---------- Daftar satuan (disimpan di Pengaturan, bisa ditambah/dihapus) ---------- */
+function unitList() {
+  var base = String(st.boot.settings.units || 'PCS').split(',').map(function (u) { return u.trim(); }).filter(Boolean);
+  (st.boot.products || []).forEach(function (p) { var u = String(p.unit || '').toUpperCase(); if (u && base.indexOf(u) < 0) base.push(u); });
+  return base;
+}
+function unitOptions(sel) {
+  var list = unitList();
+  sel = String(sel || '').toUpperCase();
+  if (sel && list.indexOf(sel) < 0) list.push(sel);
+  return list.map(function (u) { return '<option value="' + esc(u) + '"' + (u === sel ? ' selected' : '') + '>' + esc(u) + '</option>'; }).join('') +
+    (can('settings.manage') ? '<option value="__new">+ Satuan baru…</option>' : '');
+}
+function saveUnits(list) {
+  return api('settings.save', { units: list.join(',') }).then(function (s) { st.boot.settings = s; saveBootCache(); return s; });
+}
+function cleanUnit(u) { return String(u || '').trim().toUpperCase().replace(/\s+/g, ''); }
+function addUnit() {
+  return new Promise(function (res) {
+    var m = modal({
+      title: 'Satuan Baru', body: '<label class="f">Nama satuan (maks. 10 karakter, tanpa spasi)<input class="input" id="nuV" maxlength="10" placeholder="mis. KARTON, IKAT, SACHET" autofocus autocapitalize="characters"></label><p class="faint" style="font-size:12.5px">Satuan baru tersimpan di daftar dan bisa dipakai untuk produk lain.</p>',
+      foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="nuOk">Tambah</button>', onClose: function (v) { res(v || null); }
+    });
+    var go = function () {
+      var u = cleanUnit(m.$('#nuV').value);
+      if (!/^[A-Z0-9.\/-]{1,10}$/.test(u)) return toast('Satuan hanya huruf/angka, maks. 10 karakter', 'bad');
+      var list = String(st.boot.settings.units || '').split(',').filter(Boolean);
+      if (list.indexOf(u) >= 0) return m.close(u);
+      run(m.$('#nuOk'), saveUnits(list.concat([u])), 'Satuan ' + u + ' ditambahkan').then(function () { m.close(u); });
+    };
+    m.$('#nuOk').onclick = go;
+    m.$('#nuV').onkeydown = function (e) { if (e.key === 'Enter') go(); };
+  });
+}
+function manageUnits() {
+  return new Promise(function (res) {
+    var list = String(st.boot.settings.units || '').split(',').filter(Boolean);
+    var used = {};
+    (st.boot.products || []).forEach(function (p) { var u = String(p.unit || '').toUpperCase(); used[u] = (used[u] || 0) + 1; });
+    var m = modal({
+      title: 'Daftar Satuan',
+      body: '<div class="chips" id="muL" style="flex-wrap:wrap"></div><div class="row mt"><input class="input" id="muV" maxlength="10" placeholder="Satuan baru"><button class="btn" id="muAdd">' + ic('plus') + 'Tambah</button></div><p class="faint" style="font-size:12.5px">Satuan yang sedang dipakai produk tidak bisa dihapus.</p>',
+      foot: '<button class="btn" data-close>Batal</button>' + (can('settings.manage') ? '<button class="btn primary" id="muOk">Simpan</button>' : ''),
+      onClose: function () { res(); }
+    });
+    var draw = function () {
+      m.$('#muL').innerHTML = list.map(function (u, i) {
+        return '<span class="chip" style="cursor:default">' + esc(u) + (used[u] ? ' <span class="faint">(' + used[u] + ')</span>' : ' <a href="#" data-x="' + i + '" style="color:var(--bad);text-decoration:none;margin-left:4px">×</a>') + '</span>';
+      }).join('');
+      m.$$('[data-x]').forEach(function (a) { a.onclick = function (e) { e.preventDefault(); list.splice(Number(a.dataset.x), 1); draw(); }; });
+    };
+    var add = function () {
+      var u = cleanUnit(m.$('#muV').value);
+      if (!/^[A-Z0-9.\/-]{1,10}$/.test(u)) return toast('Satuan hanya huruf/angka, maks. 10 karakter', 'bad');
+      if (list.indexOf(u) < 0) list.push(u);
+      m.$('#muV').value = ''; draw();
+    };
+    m.$('#muAdd').onclick = add;
+    m.$('#muV').onkeydown = function (e) { if (e.key === 'Enter') add(); };
+    var ok = m.$('#muOk'); if (ok) ok.onclick = function () { run(ok, saveUnits(list), 'Daftar satuan disimpan').then(function () { m.close(); }); };
+    draw();
+  });
+}
+
 function editCategories() {
   var m = modal({
     title: 'Kategori Produk', body: '<div id="cl"></div><form id="cfm" class="row mt"><input class="input" name="name" placeholder="Nama kategori baru" required><button class="btn primary">Tambah</button></form>'
@@ -2782,7 +2853,7 @@ var LEGAL = {
   oss: ['Lisensi Pihak Ketiga',
     '<ul><li><b>JsBarcode</b> 3.11.6 — MIT License © Johan Lindell (dimuat dari cdnjs saat mencetak label).</li><li><b>ZXing JS (@zxing/library)</b> 0.21.3 — Apache License 2.0 (dimuat dari jsDelivr hanya bila browser tidak mendukung BarcodeDetector).</li><li>Ikon antarmuka digambar khusus untuk aplikasi ini.</li><li>Google Apps Script, Google Sheets, Google Drive — tunduk pada Ketentuan Layanan Google.</li></ul><p>Tidak ada kode dari versi React asli (React, Tailwind, lucide-react, motion, Express, Prisma) yang disertakan dalam edisi ini.</p>'],
   changelog: ['Riwayat Versi',
-    '<h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
+    '<h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
 };
 function showLegal(k) { var l = LEGAL[k]; modal({ title: l[0], size: 'wide', body: '<div class="legal">' + l[1] + '</div>' }); }
 
