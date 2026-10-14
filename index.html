@@ -223,10 +223,17 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 .paytotal{text-align:center;padding:6px 0 14px}
 .paytotal .l{color:var(--ink-2);font-weight:600;font-size:13px}
 .paytotal .v{font-size:34px;font-weight:850;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.methods{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.methods{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px}
 .methods button{border:1px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 4px;font-weight:700;font-size:12.5px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px}
 .methods button.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand)}
 @media (max-width:420px){.methods{grid-template-columns:repeat(3,1fr)}}
+.aging{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.aging div{border:1px solid var(--line);border-radius:10px;padding:10px;background:var(--panel)}
+.aging b{display:block;font-size:15px;font-variant-numeric:tabular-nums}
+.aging span{font-size:11.5px;color:var(--ink-2);font-weight:600}
+.aging i{display:block;height:5px;border-radius:9px;margin-top:6px;background:var(--line)}
+.aging i>u{display:block;height:100%;border-radius:9px;background:var(--brand)}
+@media (max-width:640px){.aging{grid-template-columns:repeat(2,1fr)}}
 .quick{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
 .quick button{min-height:42px}
 .change{font-size:22px;font-weight:850;font-variant-numeric:tabular-nums}
@@ -450,7 +457,7 @@ function RPOS_calcCart(cart, ctx) {
 <script>
 /* ===================== Retail POS Enterprise — Klien (inti) ===================== */
 'use strict';
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.2.0';
 var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 
 /* ---------- Utilitas ---------- */
@@ -567,6 +574,7 @@ var ICONS = {
   truck: '<path d="M1 4h14v12H1zM15 9h4l3 3v4h-7"/><circle cx="5.5" cy="18.5" r="2"/><circle cx="18.5" cy="18.5" r="2"/>',
   clipboard: '<rect x="5" y="4" width="14" height="18" rx="2"/><path d="M9 2h6v4H9zM9 12h6M9 16h4"/>',
   store: '<path d="M3 9 4.5 4h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6"/>', star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1 6.2L12 17.3 6.5 20.2l1-6.2L3 9.6l6.2-.9z"/>',
+  wallet: '<path d="M20 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h13a2 2 0 0 0 2-2v-2"/><path d="M22 10h-6a2 2 0 0 0 0 4h6z"/><path d="M3 7h17"/>',
   image: '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/>',
   eyeoff: '<path d="M2 2l20 20M10.6 10.6a2 2 0 0 0 2.8 2.8M9.9 5.1A10 10 0 0 1 12 5c6 0 10 7 10 7a17 17 0 0 1-3.2 3.9M6.6 6.6C3.9 8.4 2 12 2 12s4 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/>',
   zoom: '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3M11 8v6M8 11h6"/>',
@@ -928,6 +936,7 @@ var NAV = [
   { id: 'products', label: 'Produk', icon: 'tag', perm: 'catalog.view' },
   { id: 'stock', label: 'Stok', icon: 'box', perm: 'stock.view' },
   { id: 'crm', label: 'Member & Promo', icon: 'star', perm: 'customer.manage' },
+  { id: 'debts', label: 'Hutang & Piutang', icon: 'wallet', perm: 'debt.view' },
   { id: 'reports', label: 'Laporan', icon: 'chart', perm: 'report.sales' },
   { id: 'audit', label: 'Audit', icon: 'shield', perm: 'audit.view' },
   { id: 'settings', label: 'Pengaturan', icon: 'gear' }
@@ -1017,14 +1026,14 @@ function loadInto(el, promise, render) {
 
 function showSyncPanel() {
   var q = st.queue;
-  var label = { 'shift.open': 'Buka shift', 'cash.move': 'Mutasi kas', sale: 'Penjualan', 'shift.close': 'Tutup shift', customer: 'Member baru' };
+  var label = { 'shift.open': 'Buka shift', 'cash.move': 'Mutasi kas', sale: 'Penjualan', 'shift.close': 'Tutup shift', customer: 'Member baru', 'debt.pay': 'Pelunasan piutang' };
   var m = modal({
     title: 'Status Sinkronisasi', size: 'wide',
     body: '<div class="row wrap"><span class="badge ' + (st.online ? 'ok' : 'bad') + '">' + (st.online ? 'Online' : 'Offline') + '</span><span class="badge">' + q.length + ' operasi di antrean</span>' +
       '<span class="faint" style="font-size:12px">Sinkron terakhir: ' + (st.lastSync ? fmtDT(st.lastSync) : '-') + '</span></div>' +
       '<p class="muted" style="font-size:13px">Transaksi selalu disimpan dulu di perangkat ini lalu dikirim otomatis ke Google Sheets. Jangan hapus data browser sebelum antrean kosong.</p>' +
       (q.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Waktu</th><th>Operasi</th><th>Rincian</th><th>Status</th></tr></thead><tbody>' + q.map(function (x) {
-        var d = x.op === 'sale' ? x.data.receiptNo + ' · ' + rp(x.data.grandTotal) : (x.op === 'cash.move' ? x.data.type + ' ' + rp(x.data.amount) : '');
+        var d = x.op === 'sale' ? x.data.receiptNo + ' · ' + rp(x.data.grandTotal) : (x.op === 'cash.move' ? x.data.type + ' ' + rp(x.data.amount) : (x.op === 'debt.pay' ? (x.data.partyName || '') + ' ' + rp(x.data.amount) : ''));
         return '<tr><td>' + fmtDT(x.at) + '</td><td>' + (label[x.op] || x.op) + '</td><td class="mono" style="font-size:12px">' + esc(d) + '</td><td>' + (x.error ? '<span class="badge bad" title="' + esc(x.error) + '">Gagal ' + x.tries + 'x</span><div style="font-size:11.5px;color:var(--bad);max-width:260px">' + esc(x.error) + '</div>' : '<span class="badge warn">Menunggu</span>') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">' + ic('check') + '<div>Semua data sudah tersinkron.</div></div>'),
     foot: (q.length ? '<button class="btn" id="qExport">' + ic('download') + 'Ekspor antrean</button>' : '') + '<button class="btn" id="qBoot">' + ic('refresh') + 'Muat ulang data</button><button class="btn primary" id="qSync">' + ic('refresh') + 'Sinkron sekarang</button>'
@@ -1347,7 +1356,7 @@ function pickCustomer() {
     var q = m.$('#cq').value.toLowerCase().trim();
     var hits = list.filter(function (c) { return !q || (c.name + ' ' + c.phone).toLowerCase().indexOf(q) >= 0; }).slice(0, 50);
     m.$('#cl').innerHTML = hits.map(function (c) {
-      return '<div class="list-item" style="cursor:pointer" data-id="' + c.id + '"><div class="grow"><b>' + esc(c.name) + '</b><div class="faint" style="font-size:12px">' + esc(c.phone || '-') + ' · ' + (c.visits || 0) + ' kunjungan</div></div><span class="badge ok">' + (c.points || 0) + ' poin</span></div>';
+      return '<div class="list-item" style="cursor:pointer" data-id="' + c.id + '"><div class="grow"><b>' + esc(c.name) + '</b><div class="faint" style="font-size:12px">' + esc(c.phone || '-') + ' · ' + (c.visits || 0) + ' kunjungan</div></div>' + (Number(c.arBalance) ? '<span class="badge warn">kasbon ' + rp(c.arBalance) + '</span>' : '') + '<span class="badge ok">' + (c.points || 0) + ' poin</span></div>';
     }).join('') || '<div class="empty">Tidak ada member</div>';
     m.$$('#cl [data-id]').forEach(function (r) { r.onclick = function () { st.cart.customer = list.filter(function (c) { return c.id === r.dataset.id; })[0]; st.cart.pointsUsed = 0; saveCart(); m.close(); renderCart(); }; });
   };
@@ -1416,12 +1425,16 @@ function openPayModal() {
   var cust = st.cart.customer;
   var S = st.boot.settings;
   var M = [['CASH', 'Tunai', 'cash'], ['QRIS', 'QRIS', 'qr'], ['DEBIT', 'Debit', 'card'], ['CREDIT', 'Kredit', 'card'], ['TRANSFER', 'Transfer', 'bank']];
+  var creditOn = hasFeat('debt') && S.arEnabled !== false;
+  if (creditOn) M.push(['PIUTANG', 'Tempo', 'wallet']);
+  var termDays = cust && Number(cust.termDays) > 0 ? Number(cust.termDays) : (Number(S.arDueDays) || 30);
   var m = modal({
     title: 'Pembayaran', size: 'wide', sticky: true,
     body: '<div class="paytotal"><div class="l">Total tagihan</div><div class="v" id="pTotal"></div><div class="faint" id="pSub" style="font-size:12px"></div></div>' +
       (cust && Number(S.pointValue) > 0 ? '<div class="alert ok row between"><span>' + ic('star', 'sm') + ' ' + esc(cust.name) + ' punya <b>' + (cust.points || 0) + '</b> poin (1 poin = ' + rp(S.pointValue) + ')</span><span class="row"><input class="input" id="pPts" type="number" min="0" max="' + (cust.points || 0) + '" value="' + (st.cart.pointsUsed || 0) + '" style="width:90px;min-height:34px"><button class="btn sm" id="pPtsMax">Maks</button></span></div>' : '') +
       '<div class="methods mt" id="pM">' + M.map(function (x) { return '<button data-m="' + x[0] + '">' + ic(x[2]) + x[1] + '</button>'; }).join('') + '</div>' +
       '<div id="pQris" class="center mt hidden">' + (S.qrisImage ? '<img alt="QRIS" src="' + esc(S.qrisImage) + '" style="max-width:220px;width:100%;border-radius:10px;border:1px solid var(--line)"><div class="faint" style="font-size:12px">Minta pelanggan scan QRIS, lalu cek notifikasi dana masuk sebelum konfirmasi.</div>' : '<div class="alert warn">Gambar QRIS statis belum diunggah (Pengaturan › Pembayaran).</div>') + '</div>' +
+      (creditOn ? '<div id="pCredit" class="alert mt hidden"></div>' : '') +
       '<div class="grid2 mt"><label class="f">Nominal diterima<input class="input big" id="pAmt" inputmode="numeric"></label><label class="f" id="pRefW">No. referensi / approval code<input class="input" id="pRef" placeholder="opsional"></label></div>' +
       '<div class="quick mt" id="pQuick"></div>' +
       '<div class="mt" id="pList"></div>' +
@@ -1446,7 +1459,19 @@ function openPayModal() {
     m.$$('#pQuick [data-v]').forEach(function (b) { b.onclick = function () { m.$('#pAmt').value = b.dataset.v; calcChange(); }; });
     m.$$('#pM button').forEach(function (b) { b.classList.toggle('on', b.dataset.m === method); });
     m.$('#pQris').classList.toggle('hidden', method !== 'QRIS');
-    m.$('#pRefW').classList.toggle('hidden', method === 'CASH');
+    m.$('#pRefW').classList.toggle('hidden', method === 'CASH' || method === 'PIUTANG');
+    var pc = m.$('#pCredit');
+    if (pc) {
+      pc.classList.toggle('hidden', method !== 'PIUTANG');
+      if (method === 'PIUTANG') {
+        pc.innerHTML = cust ? (ic('wallet', 'sm') + ' Tempo/kasbon atas nama <b>' + esc(cust.name) + '</b>. Piutang saat ini <b>' + rp(cust.arBalance || 0) + '</b>' +
+          (Number(cust.creditLimit) > 0 ? ' · limit ' + rp(cust.creditLimit) : ' · tanpa limit') +
+          '<label class="f mt">Jatuh tempo<input class="input" type="date" id="pDue" value="' + (m.$('#pDue') ? m.$('#pDue').value : dateAdd(today(), termDays)) + '"></label>')
+          : '<b>Pilih member terlebih dahulu</b> — penjualan tempo harus atas nama pelanggan. <button class="btn sm mt" id="pPickCust">' + ic('user', 'sm') + 'Pilih member</button>';
+        var pk = m.$('#pPickCust'); if (pk) pk.onclick = function () { m.close(); pickCustomer(); };
+        pc.className = 'alert mt ' + (cust ? 'warn' : 'bad');
+      }
+    }
     if (!m.$('#pAmt').value || method !== 'CASH') m.$('#pAmt').value = remain;
     m.$('#pList').innerHTML = pays.length ? '<div class="tbl-wrap"><table class="tbl"><tbody>' + pays.map(function (p, i) {
       return '<tr><td>' + esc(p.label) + (p.ref ? ' <span class="faint mono">' + esc(p.ref) + '</span>' : '') + '</td><td class="right num">' + rp(p.amount) + '</td><td class="right"><button class="btn sm icon ghost" data-rm="' + i + '">' + ic('x', 'sm') + '</button></td></tr>';
@@ -1467,6 +1492,7 @@ function openPayModal() {
     if (amt <= 0) return false;
     var remain = c.grandTotal - paid();
     if (method !== 'CASH' && amt > remain) { toast('Pembayaran non-tunai tidak boleh melebihi sisa tagihan ' + rp(remain), 'bad'); return null; }
+    if (method === 'PIUTANG' && !cust) { toast('Pilih member untuk penjualan tempo', 'bad'); return null; }
     var lab = M.filter(function (x) { return x[0] === method; })[0][1];
     pays.push({ method: method, label: lab, amount: amt, ref: method === 'CASH' ? '' : m.$('#pRef').value.trim() });
     m.$('#pRef').value = '';
@@ -1482,8 +1508,19 @@ function openPayModal() {
     if (r === null) return;
     if (paid() < c.grandTotal) { toast('Pembayaran kurang', 'bad'); return; }
     st.cart.note = m.$('#pNote').value.trim();
+    var credit = pays.filter(function (p) { return p.method === 'PIUTANG'; }).reduce(function (a, p) { return a + p.amount; }, 0);
+    var extra = { dueDate: credit && m.$('#pDue') ? m.$('#pDue').value : '' };
+    var lim = cust ? Number(cust.creditLimit) || 0 : 0;
+    var approver = ['SUPER_ADMIN', 'COMPANY_ADMIN', 'AREA_MANAGER', 'STORE_MANAGER'].indexOf(st.user.role) >= 0;
+    if (credit && lim > 0 && (Number(cust.arBalance) || 0) + credit > lim && !approver) {
+      return askSupervisor(['Piutang ' + cust.name + ' menjadi ' + rp((Number(cust.arBalance) || 0) + credit) + ', melebihi limit ' + rp(lim)], 'KREDIT', credit).then(function (a) {
+        if (!a) { pays = pays.filter(function (p) { return p.method !== 'PIUTANG'; }); refresh(); return; }
+        extra.creditApproval = a.token ? { token: a.token } : { pin: a.pin };
+        m.close(); finishSale(c, pays, extra);
+      });
+    }
     m.close();
-    finishSale(c, pays);
+    finishSale(c, pays, extra);
   };
   refresh();
   setTimeout(function () { var a = m.$('#pAmt'); if (a && matchMedia('(min-width:900px)').matches) { a.focus(); a.select(); } }, 80);
@@ -1499,7 +1536,9 @@ function nextReceiptNo() {
   return (o.code || 'TK') + '-' + st.device.register + '-' + ymd + '-' + String(n).padStart(4, '0');
 }
 
-function finishSale(c, pays) {
+function finishSale(c, pays, extra) {
+  extra = extra || {};
+  var credit = pays.filter(function (p) { return p.method === 'PIUTANG'; }).reduce(function (a, p) { return a + p.amount; }, 0);
   var paid = pays.reduce(function (a, p) { return a + p.amount; }, 0);
   var change = paid - c.grandTotal;
   var sale = {
@@ -1512,11 +1551,13 @@ function finishSale(c, pays) {
     approvals: {}, calc: { grossSubtotal: c.grossSubtotal, discountTotal: c.discountTotal, taxBase: c.taxBase, taxTotal: c.taxTotal, rounding: c.rounding, grandTotal: c.grandTotal, promos: c.promos }
   };
   Object.keys(st.cart.approvals).forEach(function (k) { var a = st.cart.approvals[k]; sale.approvals[k] = a.token ? { token: a.token } : { pin: a.pin }; });
+  if (extra.creditApproval) sale.approvals.credit = extra.creditApproval;
+  if (credit) sale.dueDate = extra.dueDate || dateAdd(today(), Number(st.boot.settings.arDueDays) || 30);
   // catatan lokal untuk struk & cetak ulang
   var local = {
     id: sale.id, receiptNo: sale.receiptNo, createdAt: sale.createdAt, outletId: sale.outletId, cashierName: st.user.fullName, register: sale.register,
-    customer: st.cart.customer ? { name: st.cart.customer.name, phone: st.cart.customer.phone, points: st.cart.customer.points } : null,
-    items: c.items, calc: c, payments: pays, paid: paid, change: change, synced: false, notes: sale.notes
+    customer: st.cart.customer ? { name: st.cart.customer.name, phone: st.cart.customer.phone, points: st.cart.customer.points, arBalance: (Number(st.cart.customer.arBalance) || 0) + credit } : null,
+    items: c.items, calc: c, payments: pays, paid: paid, change: change, synced: false, notes: sale.notes, credit: credit, dueDate: sale.dueDate || ''
   };
   st.localSales.unshift(local); st.localSales = st.localSales.slice(0, 300);
   kv.set('localSales', st.localSales);
@@ -1529,6 +1570,10 @@ function finishSale(c, pays) {
   st.shift.trxCount = (Number(st.shift.trxCount) || 0) + 1;
   kv.set('shift', st.shift);
   if (st.cart.customer) {
+    if (credit) {
+      st.cart.customer.arBalance = (Number(st.cart.customer.arBalance) || 0) + credit;
+      (st.boot.customers || []).forEach(function (x) { if (x.id === st.cart.customer.id) x.arBalance = st.cart.customer.arBalance; });
+    }
     var ppr = Number(st.boot.settings.pointsPerRp) || 0;
     st.cart.customer.points = Math.max(0, (st.cart.customer.points || 0) - c.pointsUsed) + (ppr ? Math.floor(c.grandTotal / ppr) : 0);
   }
@@ -1549,7 +1594,7 @@ function receiptHtml(s) {
     return '<tr><td colspan="2">' + esc(i.name) + '</td></tr><tr><td>&nbsp;' + qtyFmt(i.qty) + ' x ' + rp(i.unitPrice, 1) + (i.isCustom ? '*' : '') + '</td><td class="r">' + rp(i.unitPrice * i.qty, 1) + '</td></tr>' +
       (d ? '<tr><td>&nbsp;' + esc(i.promo || 'Diskon') + '</td><td class="r">-' + rp(d, 1) + '</td></tr>' : '');
   }).join('');
-  var payLabel = { CASH: 'Tunai', QRIS: 'QRIS', DEBIT: 'Debit', CREDIT: 'Kredit', TRANSFER: 'Transfer' };
+  var payLabel = { CASH: 'Tunai', QRIS: 'QRIS', DEBIT: 'Debit', CREDIT: 'Kredit', TRANSFER: 'Transfer', PIUTANG: 'Tempo/Kasbon' };
   var lic = st.boot.license;
   return '<div class="rcpt ' + w + '">' +
     (S.logo ? '<div class="c"><img alt="" src="' + esc(S.logo) + '" style="max-width:80px;max-height:60px;filter:grayscale(1)"></div>' : '') +
@@ -1564,6 +1609,7 @@ function receiptHtml(s) {
     '<tr><td class="big">TOTAL</td><td class="r big">' + rp(c.grandTotal, 1) + '</td></tr>' +
     s.payments.map(function (p) { return '<tr><td>' + (payLabel[p.method] || p.method) + (p.ref ? ' ' + esc(p.ref) : '') + '</td><td class="r">' + rp(p.amount, 1) + '</td></tr>'; }).join('') +
     '<tr><td>Kembali</td><td class="r">' + rp(s.change, 1) + '</td></tr></table>' +
+    (s.credit ? '<hr><div><b>PENJUALAN TEMPO</b><br>Kasbon: ' + rp(s.credit) + '<br>Jatuh tempo: ' + fmtD(s.dueDate) + (s.customer && s.customer.arBalance !== undefined ? '<br>Total piutang Anda: ' + rp(s.customer.arBalance) : '') + '</div><div class="c" style="margin-top:22px">(' + esc(s.customer ? s.customer.name : '') + ')<br>tanda tangan pelanggan</div>' : '') +
     (c.taxTotal ? '<hr><table><tr><td>DPP</td><td class="r">' + rp(c.taxBase, 1) + '</td></tr><tr><td>PPN ' + c.taxRate + '%</td><td class="r">' + rp(c.taxTotal, 1) + '</td></tr></table>' : '') +
     (c.promos && c.promos.length ? '<hr><div>' + c.promos.map(esc).join('<br>') + '</div>' : '') +
     (c.items.some(function (i) { return i.isCustom; }) ? '<div>* harga kesepakatan</div>' : '') +
@@ -1582,6 +1628,7 @@ function receiptText(s) {
   L.push('*TOTAL: ' + rp(c.grandTotal) + '*');
   s.payments.forEach(function (p) { L.push(p.method + ': ' + rp(p.amount)); });
   L.push('Kembali: ' + rp(s.change));
+  if (s.credit) L.push('Tempo/Kasbon: ' + rp(s.credit) + ' — jatuh tempo ' + fmtD(s.dueDate) + (s.customer && s.customer.arBalance !== undefined ? ' (total piutang ' + rp(s.customer.arBalance) + ')' : ''));
   var link = eReceiptLink(s);
   if (link) L.push('', 'Struk digital: ' + link);
   L.push('', S.receiptFooter || 'Terima kasih');
@@ -1643,10 +1690,12 @@ function showShiftMenu() {
     body: '<div class="kpis"><div class="kpi"><div class="l">Modal awal</div><div class="v">' + rp(s.openingCash) + '</div></div><div class="kpi"><div class="l">Penjualan tunai</div><div class="v">' + rp(s.cashSales) + '</div></div>' +
       '<div class="kpi"><div class="l">Non-tunai</div><div class="v">' + rp(s.nonCashSales) + '</div></div><div class="kpi"><div class="l">Kas seharusnya</div><div class="v">' + rp(shiftExpected()) + '</div><div class="s">' + (s.trxCount || 0) + ' transaksi</div></div></div>' +
       '<div class="grid3 mt"><button class="btn" data-t="DROP">' + ic('bank') + 'Setor kas</button><button class="btn" data-t="PAYOUT">' + ic('minus') + 'Kas keluar</button><button class="btn" data-t="PAYIN">' + ic('plus') + 'Kas masuk</button></div>' +
+      (hasFeat('debt') && can('ar.collect') ? '<button class="btn block mt" id="shAr">' + ic('wallet') + 'Terima bayar kasbon / piutang pelanggan</button>' : '') +
       '<p class="faint" style="font-size:12px">Setor kas = uang diambil dari laci ke brankas/bank. Kas keluar = biaya operasional kecil (dicatat sebagai beban).</p>',
     foot: '<button class="btn" id="shX">' + ic('printer') + 'Laporan X</button><button class="btn danger solid" id="shClose">Tutup Shift</button>'
   });
   m.$$('[data-t]').forEach(function (b) { b.onclick = function () { m.close(); cashMove(b.dataset.t); }; });
+  var shAr = m.$('#shAr'); if (shAr) shAr.onclick = function () { m.close(); collectArAtPos(); };
   m.$('#shClose').onclick = function () { m.close(); closeShift(); };
   m.$('#shX').onclick = function () { printShift(Object.assign({}, s, { expectedCash: shiftExpected() }), 'X'); };
 }
@@ -1859,6 +1908,7 @@ function voidOrReturn(s, type) {
       '<label class="f mt">Kondisi barang<select class="input" id="vCond"><option value="GOOD">Baik — kembalikan ke stok</option><option value="DAMAGED">Rusak — tidak masuk stok</option></select></label>') +
       '<label class="f mt">Alasan<select class="input" id="vR">' + opts(reasons, reasons[0]) + '</select></label>' +
       '<label class="f mt">Catatan<input class="input" id="vN"></label>' +
+      (s.payments.some(function (p) { return p.method === 'PIUTANG'; }) ? '<div class="alert warn mt">Struk ini dibayar tempo/kasbon: nilai retur akan <b>mengurangi sisa piutang</b> pelanggan lebih dulu; sisanya (jika piutang sudah dibayar) dikembalikan lewat metode di bawah.</div>' : '') +
       '<label class="f mt">Pengembalian dana via<select class="input" id="vM">' + opts([{ id: '', name: 'Sesuai metode bayar awal' }, { id: 'CASH', name: 'Tunai' }, { id: 'TRANSFER', name: 'Transfer' }, { id: 'QRIS', name: 'QRIS' }], '') + '</select></label>' +
       (isVoid ? '<label class="chk mt"><input type="checkbox" id="vRs" checked> Kembalikan barang ke stok</label>' : ''),
     foot: '<button class="btn" data-close>Batal</button><button class="btn danger solid" id="vOk">' + (isVoid ? 'Void' : 'Proses Retur') + '</button>'
@@ -1877,7 +1927,8 @@ function voidOrReturn(s, type) {
       run(m.$('#vOk'), api(isVoid ? 'sales.void' : 'sales.return', p)).then(function (r) {
         m.close();
         toast((isVoid ? 'Void' : 'Retur') + ' berhasil — refund ' + rp(r.refund), 'ok');
-        if (r.refundMethod === 'CASH' && st.shift) { st.shift.cashRefund = (Number(st.shift.cashRefund) || 0) + Number(r.refund); kv.set('shift', st.shift); }
+        if (Number(r.cashRefund) && st.shift) { st.shift.cashRefund = (Number(st.shift.cashRefund) || 0) + Number(r.cashRefund); kv.set('shift', st.shift); }
+        if (Number(r.arReduced)) toast('Piutang pelanggan berkurang ' + rp(r.arReduced), 'ok', 4000);
         if (st.view === 'history') go_refresh();
       });
     };
@@ -2487,17 +2538,47 @@ STOCK_VIEWS.ledger = function (el) {
   };
   $('#lgGo').onclick = load; load();
 };
+/** Pilihan pembayaran saat barang diterima → hutang supplier / langsung dibayar */
+function apPayFields(terms, idp) {
+  if (!hasFeat('debt')) return '';
+  idp = idp || 'ap';
+  var due = apDueFromTerms(terms);
+  return '<div class="grid2 mt"><label class="f">Pembayaran ke supplier<select class="input" id="' + idp + 'Pay">' +
+    opts([{ id: 'NONE', name: 'Tempo — dicatat sebagai hutang' }, { id: 'KAS', name: 'Lunas tunai dari kas laci' }, { id: 'BANK', name: 'Lunas transfer bank' }], 'NONE') + '</select></label>' +
+    '<label class="f" id="' + idp + 'DueW">Jatuh tempo hutang<input class="input" type="date" id="' + idp + 'Due" value="' + due + '"><span class="faint" style="font-weight:400" id="' + idp + 'Hint">' + (terms ? 'Termin supplier: ' + esc(terms) : 'Termin default 30 hari') + '</span></label></div>';
+}
+function apDueFromTerms(terms) {
+  var t = String(terms || ''), m = /(\d+)/.exec(t);
+  return dateAdd(today(), /COD|TUNAI|CASH/i.test(t) ? 0 : (m ? Number(m[1]) : 30));
+}
+function bindApPay(root, idp) {
+  idp = idp || 'ap';
+  var s = $('#' + idp + 'Pay', root); if (!s) return function () { return {}; };
+  s.onchange = function () { $('#' + idp + 'DueW', root).classList.toggle('hidden', s.value !== 'NONE'); };
+  return function () { return { payNow: s.value === 'NONE' ? '' : s.value, dueDate: s.value === 'NONE' ? $('#' + idp + 'Due', root).value : '' }; };
+}
+function apToast(r) {
+  if (r && r.ap) toast(r.ap.paid ? 'Dibayar lunas · ' + r.ap.payDocNo : 'Hutang ' + r.ap.docNo + ' jatuh tempo ' + fmtD(r.ap.dueDate), 'ok', 5000);
+}
+
 STOCK_VIEWS.receive = function (el) {
   el.innerHTML = '<div class="card"><h3>Penerimaan Barang Langsung (tanpa PO)</h3><p class="faint" style="font-size:12.5px">Untuk barang datang dengan PO, gunakan tab Purchase Order › Terima. HPP diperbarui dengan metode rata-rata bergerak.</p>' +
     '<div class="grid3"><label class="f">Supplier<input class="input" id="rcS" list="supL" placeholder="Nama supplier"><datalist id="supL">' + (st.boot.suppliers || []).map(function (s) { return '<option value="' + esc(s.name) + '">'; }).join('') + '</datalist></label>' +
     '<label class="f">No. faktur / surat jalan<input class="input" id="rcR"></label><label class="f">Catatan<input class="input" id="rcN"></label></div>' +
-    '<div id="rcI" class="mt"></div><label class="chk mt"><input type="checkbox" id="rcU" checked> Perbarui HPP dengan harga beli ini</label>' +
+    '<div id="rcI" class="mt"></div><label class="chk mt"><input type="checkbox" id="rcU" checked> Perbarui HPP dengan harga beli ini</label>' + apPayFields('', 'rc') +
     '<div class="row mt"><span class="grow"></span><button class="btn primary" id="rcGo">' + ic('check') + 'Simpan Penerimaan</button></div></div>';
   var ed = itemEditor($('#rcI'), { cost: true });
+  var getPay = bindApPay(el, 'rc');
+  var supOf = function () { var n = $('#rcS').value.trim().toLowerCase(); return (st.boot.suppliers || []).filter(function (s) { return String(s.name).toLowerCase() === n; })[0]; };
+  $('#rcS').onchange = function () { var s = supOf(); var due = $('#rcDue'); if (due) { due.value = apDueFromTerms(s && s.terms); $('#rcHint').textContent = s && s.terms ? 'Termin supplier: ' + s.terms : 'Termin default 30 hari'; } };
   $('#rcGo').onclick = function () {
     var items = ed.get(); if (!items.length) return toast('Tambahkan item', 'warn');
-    run($('#rcGo'), api('stock.receive', { outletId: st.outletId, supplierName: $('#rcS').value, refNo: $('#rcR').value, notes: $('#rcN').value, items: items, updateCost: $('#rcU').checked })).then(function (r) {
-      toast('Tersimpan ' + r.refNo + ' · ' + rp(r.total), 'ok'); loadBoot('silent'); ed.set([]);
+    var s = supOf();
+    var payload = Object.assign({ outletId: st.outletId, supplierId: s ? s.id : '', supplierName: $('#rcS').value, refNo: $('#rcR').value, notes: $('#rcN').value, items: items, updateCost: $('#rcU').checked }, getPay());
+    run($('#rcGo'), api('stock.receive', payload)).then(function (r) {
+      toast('Tersimpan ' + r.refNo + ' · ' + rp(r.total), 'ok'); apToast(r);
+      if (payload.payNow === 'KAS' && st.shift && st.shift.outletId === st.outletId) { st.shift.cashOut = (Number(st.shift.cashOut) || 0) + r.total; kv.set('shift', st.shift); }
+      loadBoot('silent'); ed.set([]);
     });
   };
 };
@@ -2662,14 +2743,16 @@ function openPO(p) {
       '<div class="tbl-wrap mt"><table class="tbl"><thead><tr><th>Produk</th><th class="right">Pesan</th><th class="right">Harga</th><th class="right">Sudah terima</th>' + (recv ? '<th class="right">Terima sekarang</th>' : '') + '</tr></thead><tbody>' + p.items.map(function (i) {
         var rem = Number(i.qty) - Number(i.receivedQty);
         return '<tr><td>' + esc(i.name) + '</td><td class="right">' + qtyFmt(i.qty) + '</td><td class="right num">' + rp(i.cost) + '</td><td class="right">' + qtyFmt(i.receivedQty) + '</td>' + (recv ? '<td class="right"><input class="input right" style="width:90px;min-height:32px" type="number" min="0" max="' + rem + '" step="any" data-r="' + i.productId + '" value="' + rem + '"></td>' : '') + '</tr>';
-      }).join('') + '</tbody></table></div><div class="right mt"><b>Total ' + rp(p.total) + '</b></div>',
+      }).join('') + '</tbody></table></div><div class="right mt"><b>Total ' + rp(p.total) + '</b></div>' +
+      (recv ? apPayFields(((st.boot.suppliers || []).filter(function (s) { return s.id === p.supplierId; })[0] || {}).terms, 'po') : ''),
     foot: '<button class="btn" id="poPrint">' + ic('printer') + 'Cetak PO</button>' + acts.map(function (a) { return '<button class="btn ' + (a[0] === 'reject' || a[0] === 'cancel' ? 'danger' : 'primary') + '" data-a="' + a[0] + '">' + a[1] + '</button>'; }).join('')
   });
+  var getPoPay = recv ? bindApPay(m.el, 'po') : function () { return {}; };
   m.$$('[data-a]').forEach(function (b) {
     b.onclick = function () {
       var q = { id: p.id, act: b.dataset.a };
-      if (q.act === 'receive') { q.received = {}; m.$$('[data-r]').forEach(function (i) { q.received[i.dataset.r] = Number(i.value) || 0; }); }
-      run(b, api('po.action', q), 'PO diperbarui').then(function () { m.close(); loadBoot('silent'); go('stock'); });
+      if (q.act === 'receive') { q.received = {}; m.$$('[data-r]').forEach(function (i) { q.received[i.dataset.r] = Number(i.value) || 0; }); Object.assign(q, getPoPay()); }
+      run(b, api('po.action', q), 'PO diperbarui').then(function (r) { apToast(r); m.close(); loadBoot('silent'); go('stock'); });
     };
   });
   m.$('#poPrint').onclick = function () {
@@ -2684,8 +2767,11 @@ function openPO(p) {
 }
 function editSuppliers() {
   var m = modal({ title: 'Supplier', size: 'wide', body: '<div id="sl"></div><h3 class="mt">Tambah / ubah</h3><form id="sf" class="grid3 mt"><input type="hidden" name="id"><input class="input" name="name" placeholder="Nama supplier" required><input class="input" name="contact" placeholder="Kontak"><input class="input" name="phone" placeholder="Telepon"><input class="input" name="address" placeholder="Alamat"><input class="input" name="terms" placeholder="Termin (COD / NET 14)"><button class="btn primary">Simpan</button></form>' });
+  var owed = {};
+  if (hasFeat('debt') && can('debt.view')) api('debt.list', { kind: 'AP', outletId: 'ALL' }).then(function (d) { d.parties.forEach(function (p) { if (p.partyId) owed[p.partyId] = p; }); draw(); }).catch(function () { });
   var draw = function () {
-    m.$('#sl').innerHTML = (st.boot.suppliers || []).map(function (s) { return '<div class="list-item"><div class="grow"><b>' + esc(s.name) + '</b><div class="faint" style="font-size:12px">' + esc([s.contact, s.phone, s.terms].filter(Boolean).join(' · ')) + '</div></div><button class="btn sm" data-id="' + s.id + '">Ubah</button></div>'; }).join('') || '<div class="empty">Belum ada supplier</div>';
+    m.$('#sl').innerHTML = (st.boot.suppliers || []).map(function (s) { var o = owed[s.id]; return '<div class="list-item"><div class="grow"><b>' + esc(s.name) + '</b><div class="faint" style="font-size:12px">' + esc([s.contact, s.phone, s.terms].filter(Boolean).join(' · ')) + '</div></div>' + (o ? '<button class="btn sm" data-ap="' + s.id + '" style="color:' + (o.overdue ? 'var(--bad)' : 'inherit') + '">' + ic('wallet', 'sm') + 'Hutang ' + rp(o.outstanding) + '</button>' : '') + '<button class="btn sm" data-id="' + s.id + '">Ubah</button></div>'; }).join('') || '<div class="empty">Belum ada supplier</div>';
+    m.$$('#sl [data-ap]').forEach(function (b) { b.onclick = function () { var s = st.boot.suppliers.filter(function (x) { return x.id === b.dataset.ap; })[0]; openDebtParty('AP', s.id, s.name); }; });
     m.$$('#sl [data-id]').forEach(function (b) { b.onclick = function () { var s = st.boot.suppliers.filter(function (x) { return x.id === b.dataset.id; })[0]; ['id', 'name', 'contact', 'phone', 'address', 'terms'].forEach(function (k) { m.$('[name=' + k + ']').value = s[k] || ''; }); }; });
   };
   m.$('#sf').onsubmit = function (e) { e.preventDefault(); run(m.$('#sf button'), api('suppliers.save', formData(m.$('#sf'))), 'Supplier disimpan').then(function (list) { st.boot.suppliers = list; saveBootCache(); m.$('#sf').reset(); draw(); }); };
@@ -2706,7 +2792,7 @@ STOCK_VIEWS.reorder = function (el) {
   });
 };
 function upsell(feat) {
-  var names = { transfer: 'Transfer Antarcabang', po: 'Purchase Order', opname: 'Stok Opname', promo: 'Mesin Promo', member: 'Member & Poin', journal: 'Jurnal & Neraca Saldo', audit_chain: 'Verifikasi Rantai Audit', consolidated: 'Laporan Konsolidasi', export: 'Ekspor CSV', wa: 'Laporan WhatsApp', backup: 'Backup Otomatis' };
+  var names = { transfer: 'Transfer Antarcabang', po: 'Purchase Order', opname: 'Stok Opname', promo: 'Mesin Promo', member: 'Member & Poin', journal: 'Jurnal & Neraca Saldo', audit_chain: 'Verifikasi Rantai Audit', consolidated: 'Laporan Konsolidasi', export: 'Ekspor CSV', wa: 'Laporan WhatsApp', backup: 'Backup Otomatis', debt: 'Hutang & Piutang' };
   return '<div class="card center" style="max-width:520px;margin:20px auto">' + ic('lock', 'lg') + '<h2 class="mt">' + (names[feat] || feat) + '</h2><p class="muted">Fitur ini tersedia pada paket yang lebih tinggi. Paket Anda saat ini: <b>' + esc(st.boot.license.label) + '</b>.</p>' + (can('license.manage') ? '<button class="btn primary" onclick="st.setTab=\'license\';go(\'settings\')">Lihat paket & aktivasi lisensi</button>' : '<p class="faint">Hubungi Pemilik untuk upgrade.</p>') + '</div>';
 }
 
@@ -2725,15 +2811,36 @@ VIEWS.crm = function (el) {
       var draw = function () {
         var q = $('#cmQ').value.toLowerCase();
         var list = rows.filter(function (c) { return !q || (c.name + ' ' + c.phone).toLowerCase().indexOf(q) >= 0; }).sort(function (a, b) { return Number(b.totalSpent) - Number(a.totalSpent); });
-        $('#cmL').innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>No. HP</th><th class="right">Poin</th><th class="right">Kunjungan</th><th class="right">Total belanja</th><th>Terakhir</th><th></th></tr></thead><tbody>' + list.map(function (c) {
-          return '<tr><td><b>' + esc(c.name) + '</b></td><td class="mono">' + esc(c.phone) + '</td><td class="right">' + (c.points || 0) + '</td><td class="right">' + (c.visits || 0) + '</td><td class="right num">' + rp(c.totalSpent) + '</td><td>' + (c.lastVisit ? fmtD(c.lastVisit) : '-') + '</td><td class="right">' + (c.phone ? '<a class="btn sm" target="_blank" href="' + waLink(c.phone, 'Halo ' + c.name + ', poin member Anda di ' + S.storeName + ' saat ini ' + (c.points || 0) + ' poin. Terima kasih!') + '">' + ic('chat', 'sm') + '</a>' : '') + '</td></tr>';
+        var dOn = hasFeat('debt');
+        $('#cmL').innerHTML = '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Nama</th><th>No. HP</th><th class="right">Poin</th><th class="right">Kunjungan</th><th class="right">Total belanja</th>' + (dOn ? '<th class="right">Kasbon</th><th class="right">Limit</th>' : '') + '<th>Terakhir</th><th></th></tr></thead><tbody>' + list.map(function (c) {
+          return '<tr class="click" data-c="' + c.id + '"><td><b>' + esc(c.name) + '</b></td><td class="mono">' + esc(c.phone) + '</td><td class="right">' + (c.points || 0) + '</td><td class="right">' + (c.visits || 0) + '</td><td class="right num">' + rp(c.totalSpent) + '</td>' + (dOn ? '<td class="right num">' + (Number(c.arBalance) ? '<span class="badge warn">' + rp(c.arBalance) + '</span>' : '-') + '</td><td class="right num">' + (Number(c.creditLimit) ? rp(c.creditLimit) : '<span class="faint">-</span>') + '</td>' : '') + '<td>' + (c.lastVisit ? fmtD(c.lastVisit) : '-') + '</td><td class="right" onclick="event.stopPropagation()">' + (c.phone ? '<a class="btn sm" target="_blank" href="' + waLink(c.phone, 'Halo ' + c.name + ', poin member Anda di ' + S.storeName + ' saat ini ' + (c.points || 0) + ' poin. Terima kasih!') + '">' + ic('chat', 'sm') + '</a>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>';
       };
-      $('#cmQ').oninput = debounce(draw, 150); draw();
-      $('#cmNew').onclick = function () {
-        var m = modal({ title: 'Member Baru', body: '<form id="nm" class="col"><input class="input" name="name" placeholder="Nama" required><input class="input" name="phone" placeholder="No. WhatsApp" required><input class="input" name="email" placeholder="Email (opsional)"></form>', foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="nmOk">Simpan</button>' });
-        m.$('#nmOk').onclick = function () { run(m.$('#nmOk'), api('customers.save', formData(m.$('#nm'))), 'Member disimpan').then(function (c) { (st.boot.customers = st.boot.customers || []).push(c); saveBootCache(); m.close(); VIEWS.crm(el); }); };
+      var memberForm = function (c) {
+        c = c || {};
+        var lim = hasFeat('debt') && can('debt.manage');
+        var m = modal({
+          title: c.id ? 'Ubah Member' : 'Member Baru',
+          body: '<form id="nm" class="col"><input class="input" name="name" placeholder="Nama" required value="' + esc(c.name || '') + '"><input class="input" name="phone" placeholder="No. WhatsApp" required value="' + esc(c.phone || '') + '"><input class="input" name="email" placeholder="Email (opsional)" value="' + esc(c.email || '') + '">' +
+            (lim ? '<div class="grid2 keep"><label class="f">Limit kasbon (Rp, 0 = tanpa limit)<input class="input" name="creditLimit" data-num inputmode="numeric" value="' + (Number(c.creditLimit) || 0) + '"></label><label class="f">Termin (hari, 0 = default ' + (Number(st.boot.settings.arDueDays) || 30) + ')<input class="input" name="termDays" type="number" min="0" value="' + (Number(c.termDays) || 0) + '"></label></div>' : '') +
+            (c.id && Number(c.arBalance) ? '<div class="alert warn">Kasbon berjalan ' + rp(c.arBalance) + ' <button type="button" class="btn sm" id="nmAr">Lihat kartu piutang</button></div>' : '') + '</form>',
+          foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="nmOk">Simpan</button>'
+        });
+        var ar = m.$('#nmAr'); if (ar) ar.onclick = function () { m.close(); openDebtParty('AR', c.id, c.name); };
+        m.$('#nmOk').onclick = function () {
+          var d = formData(m.$('#nm')); if (c.id) d.id = c.id;
+          run(m.$('#nmOk'), api('customers.save', d), 'Member disimpan').then(function (saved) {
+            saved.arBalance = c.arBalance || 0;
+            var list = st.boot.customers = st.boot.customers || [];
+            var ex = list.filter(function (x) { return x.id === saved.id; })[0];
+            if (ex) Object.assign(ex, saved); else list.push(saved);
+            saveBootCache(); m.close(); VIEWS.crm(el);
+          });
+        };
       };
+      $('#cmQ').oninput = debounce(draw, 150); draw();
+      $('#cmL').onclick = function (e) { var tr = e.target.closest('tr[data-c]'); if (tr) memberForm(rows.filter(function (x) { return x.id === tr.dataset.c; })[0]); };
+      $('#cmNew').onclick = function () { memberForm(null); };
       var ex = $('#cmExp'); if (ex) ex.onclick = function () { downloadFile('member-' + today() + '.csv', toCSV(rows, ['name', 'phone', 'email', 'points', 'visits', 'totalSpent', 'createdAt', 'lastVisit'].map(function (k) { return { key: k, label: k }; }), ls.get('csvSep', ','))); };
     });
   } else {
@@ -2772,6 +2879,298 @@ function editPromo(p) {
     var d = formData(m.$('#pf')); d.id = p.id;
     run(m.$('#prOk'), api('promos.save', d), 'Promo disimpan').then(function (all) { st.boot.promos = all.filter(function (x) { return x.active === true || x.active === 'TRUE'; }); saveBootCache(); m.close(); go('crm'); });
   };
+}
+
+/* ===================== Hutang & Piutang ===================== */
+var DEBT_BUCKETS = [['b0', 'Belum jatuh tempo'], ['b30', '1–30 hari'], ['b60', '31–60 hari'], ['b90', '61–90 hari'], ['b90p', '> 90 hari']];
+var DEBT_STATUS = { OPEN: ['Belum bayar', 'warn'], PARTIAL: ['Sebagian', 'info'], PAID: ['Lunas', 'ok'], VOID: ['Batal', ''] };
+var AR_METHODS = [['CASH', 'Tunai (kas laci)'], ['TRANSFER', 'Transfer bank'], ['QRIS', 'QRIS'], ['DEBIT', 'Kartu debit']];
+var AP_METHODS = [['CASH', 'Tunai dari kas laci'], ['BANK', 'Transfer / rekening bank']];
+
+function debtWord(kind) { return kind === 'AP' ? 'hutang' : 'piutang'; }
+function dueBadge(d) {
+  if (!d.dueDate) return '-';
+  var days = Math.round((new Date(String(d.dueDate).slice(0, 10)) - new Date(today())) / 86400000);
+  var open = d.status === 'OPEN' || d.status === 'PARTIAL';
+  var cls = !open ? '' : (days < 0 ? 'bad' : (days <= 7 ? 'warn' : ''));
+  return fmtD(d.dueDate) + (open ? ' <span class="badge ' + cls + '">' + (days < 0 ? 'lewat ' + (-days) + ' hr' : (days === 0 ? 'hari ini' : days + ' hr lagi')) + '</span>' : '');
+}
+
+VIEWS.debts = function (el) {
+  if (!hasFeat('debt')) { el.innerHTML = upsell('debt'); return; }
+  var tab = st.debtTab || 'AR';
+  var f = st.debtF || (st.debtF = { outlet: can('report.cross') && st.boot.outlets.length > 1 ? 'ALL' : st.outletId, mode: 'party', q: '' });
+  el.innerHTML = '<div class="tabs"><button class="tab ' + (tab === 'AR' ? 'on' : '') + '" data-t="AR">Piutang pelanggan</button><button class="tab ' + (tab === 'AP' ? 'on' : '') + '" data-t="AP">Hutang supplier</button><button class="tab ' + (tab === 'PAY' ? 'on' : '') + '" data-t="PAY">Riwayat pembayaran</button></div><div id="dbB"></div>';
+  $$('.tab', el).forEach(function (b) { b.onclick = function () { st.debtTab = b.dataset.t; VIEWS.debts(el); }; });
+  var body = $('#dbB');
+  if (tab === 'PAY') return debtPaymentsView(body);
+  var outs = (can('report.cross') && st.boot.outlets.length > 1 ? [{ id: 'ALL', name: 'Semua outlet' }] : []).concat(st.boot.outlets);
+  loadInto(body, api('debt.list', { kind: tab, outletId: f.outlet }), function (d) {
+    var s = d.summary, max = Math.max(1, s.b0, s.b30, s.b60, s.b90, s.b90p);
+    body.innerHTML =
+      '<div class="kpis mb"><div class="kpi"><div class="l">Total ' + debtWord(tab) + ' terbuka</div><div class="v">' + rp(s.outstanding) + '</div><div class="s">' + s.docs + ' dokumen · ' + d.parties.length + ' ' + (tab === 'AR' ? 'pelanggan' : 'supplier') + '</div></div>' +
+      '<div class="kpi"><div class="l">Lewat jatuh tempo</div><div class="v" style="color:' + (s.overdue ? 'var(--bad)' : 'inherit') + '">' + rp(s.overdue) + '</div></div>' +
+      '<div class="kpi"><div class="l">Jatuh tempo ≤ 7 hari</div><div class="v" style="color:' + (s.dueSoon ? 'var(--warn)' : 'inherit') + '">' + rp(s.dueSoon) + '</div></div></div>' +
+      '<div class="card mb"><div class="card-h"><h3>Umur ' + debtWord(tab) + ' (aging)</h3><span class="faint" style="font-size:12px">dihitung dari tanggal jatuh tempo</span></div><div class="aging">' +
+      DEBT_BUCKETS.map(function (b) { return '<div><span>' + b[1] + '</span><b>' + rp(s[b[0]]) + '</b><i><u style="width:' + (s[b[0]] / max * 100) + '%;' + (b[0] === 'b0' ? '' : 'background:' + (b[0] === 'b30' ? 'var(--warn)' : 'var(--bad)')) + '"></u></i></div>'; }).join('') + '</div></div>' +
+      '<div class="row wrap mb">' + (outs.length > 1 ? '<select class="input" id="dbO" style="width:auto">' + opts(outs, f.outlet) + '</select>' : '') +
+      '<div class="chips"><button class="chip ' + (f.mode === 'party' ? 'on' : '') + '" data-mode="party">Per ' + (tab === 'AR' ? 'pelanggan' : 'supplier') + '</button><button class="chip ' + (f.mode === 'doc' ? 'on' : '') + '" data-mode="doc">Per dokumen</button></div>' +
+      '<input class="input grow" id="dbQ" placeholder="Cari nama / no. dokumen" value="' + esc(f.q) + '" style="min-width:160px">' +
+      (can('debt.manage') ? '<button class="btn primary" id="dbNew">' + ic('plus') + 'Catat ' + debtWord(tab) + '</button>' : '') +
+      (tab === 'AR' && can('ar.collect') ? '<button class="btn" id="dbCol">' + ic('wallet') + 'Terima pembayaran</button>' : '') +
+      (hasFeat('export') ? '<button class="btn" id="dbCsv">' + ic('download') + 'CSV</button>' : '') + '</div><div id="dbL"></div>';
+    var draw = function () {
+      f.q = $('#dbQ').value.toLowerCase().trim();
+      var L = $('#dbL');
+      if (f.mode === 'party') {
+        var rows = d.parties.filter(function (p) { return !f.q || (p.partyName + ' ' + (p.partyPhone || '')).toLowerCase().indexOf(f.q) >= 0; });
+        L.innerHTML = rows.length ? '<div class="tbl-wrap only-desk"><table class="tbl"><thead><tr><th>' + (tab === 'AR' ? 'Pelanggan' : 'Supplier') + '</th><th class="right">Dokumen</th><th>Jatuh tempo terlama</th><th class="right">Lewat tempo</th><th class="right">Sisa ' + debtWord(tab) + '</th>' + (tab === 'AR' ? '<th class="right">Limit</th>' : '') + '</tr></thead><tbody>' +
+          rows.map(function (p, i) {
+            return '<tr class="click" data-i="' + i + '"><td><b>' + esc(p.partyName) + '</b><div class="faint" style="font-size:12px">' + esc(p.partyPhone || (p.partyType === 'OTHER' ? 'lain-lain' : '')) + '</div></td><td class="right">' + p.docs + '</td><td>' + (p.oldestDue ? dueBadge({ dueDate: p.oldestDue, status: 'OPEN' }) : '-') + '</td><td class="right num" style="color:' + (p.overdue ? 'var(--bad)' : 'inherit') + '">' + (p.overdue ? rp(p.overdue) : '-') + '</td><td class="right num"><b>' + rp(p.outstanding) + '</b></td>' +
+              (tab === 'AR' ? '<td class="right num">' + (p.creditLimit ? rp(p.creditLimit) + (p.outstanding > p.creditLimit ? ' <span class="badge bad">lewat</span>' : '') : '<span class="faint">-</span>') + '</td>' : '') + '</tr>';
+          }).join('') + '</tbody></table></div><div class="only-mob">' + rows.map(function (p, i) {
+            return '<div class="mcard" data-i="' + i + '"><div class="grow"><b>' + esc(p.partyName) + '</b><div class="faint" style="font-size:12px">' + p.docs + ' dok · tempo terlama ' + (p.oldestDue ? fmtD(p.oldestDue) : '-') + '</div></div><div class="right"><b class="num">' + rp(p.outstanding) + '</b>' + (p.overdue ? '<div><span class="badge bad">lewat ' + rp(p.overdue) + '</span></div>' : '') + '</div></div>';
+          }).join('') + '</div>' : '<div class="empty">' + ic('check') + '<div>Tidak ada ' + debtWord(tab) + ' terbuka</div></div>';
+        $$('[data-i]', L).forEach(function (r) { r.onclick = function () { var p = rows[Number(r.dataset.i)]; openDebtParty(tab, p.partyId, p.partyName); }; });
+      } else {
+        var docs = d.docs.filter(function (x) { return !f.q || (x.partyName + ' ' + x.docNo + ' ' + x.refId).toLowerCase().indexOf(f.q) >= 0; });
+        L.innerHTML = docs.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. dokumen</th><th>' + (tab === 'AR' ? 'Pelanggan' : 'Supplier') + '</th><th>Tanggal</th><th>Jatuh tempo</th><th class="right">Nilai</th><th class="right">Sisa</th><th>Asal</th></tr></thead><tbody>' +
+          docs.map(function (x, i) { return '<tr class="click" data-k="' + i + '"><td class="mono" style="font-size:12px">' + esc(x.docNo) + '</td><td>' + esc(x.partyName) + '</td><td>' + fmtD(x.date) + '</td><td>' + dueBadge(x) + '</td><td class="right num">' + rp(x.amount) + '</td><td class="right num"><b>' + rp(x.balance) + '</b></td><td style="font-size:12px">' + esc(refLabel(x)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Tidak ada dokumen</div>';
+        $$('[data-k]', L).forEach(function (r) { r.onclick = function () { var x = docs[Number(r.dataset.k)]; openDebtParty(tab, x.partyId, x.partyName); }; });
+      }
+    };
+    $('#dbQ').oninput = debounce(draw, 150);
+    $$('[data-mode]', body).forEach(function (b) { b.onclick = function () { f.mode = b.dataset.mode; VIEWS.debts(el); }; });
+    var o = $('#dbO'); if (o) o.onchange = function () { f.outlet = o.value; VIEWS.debts(el); };
+    var nb = $('#dbNew'); if (nb) nb.onclick = function () { debtManualModal(tab); };
+    var cb = $('#dbCol'); if (cb) cb.onclick = function () { collectArAtPos(); };
+    var cs = $('#dbCsv'); if (cs) cs.onclick = function () {
+      downloadFile((tab === 'AR' ? 'piutang-' : 'hutang-') + today() + '.csv', toCSV(d.docs, [{ key: 'docNo', label: 'No' }, { key: 'partyName', label: 'Pihak' }, { key: 'date', label: 'Tanggal' }, { key: 'dueDate', label: 'Jatuh tempo' }, { key: 'amount', label: 'Nilai' }, { key: 'paid', label: 'Dibayar' }, { key: 'adjusted', label: 'Penyesuaian/retur' }, { key: 'balance', label: 'Sisa' }, { key: 'status', label: 'Status' }, { get: refLabel, label: 'Asal' }, { key: 'notes', label: 'Catatan' }], ls.get('csvSep', ',')));
+    };
+    draw();
+  });
+};
+function refLabel(x) {
+  var t = String(x.refType || '');
+  if (t === 'SALE') return 'Penjualan ' + x.refId;
+  if (t === 'GRN') return 'Terima barang ' + x.refId;
+  if (t === 'PO') return 'PO ' + x.refId;
+  if (t.indexOf('MANUAL') === 0) return 'Manual' + (x.refId ? ' · ' + x.refId : '');
+  return t + ' ' + (x.refId || '');
+}
+
+function debtPaymentsView(el) {
+  var f = st.debtPayF || (st.debtPayF = { from: dateAdd(today(), -30), to: today(), kind: 'ALL' });
+  el.innerHTML = '<div class="row wrap mb"><input class="input" type="date" id="dpF" value="' + f.from + '" style="width:auto"><input class="input" type="date" id="dpT" value="' + f.to + '" style="width:auto"><select class="input" id="dpK" style="width:auto">' + opts([{ id: 'ALL', name: 'Semua' }, { id: 'AR', name: 'Terima piutang' }, { id: 'AP', name: 'Bayar hutang' }], f.kind) + '</select><button class="btn primary" id="dpGo">Tampilkan</button></div><div id="dpL"></div>';
+  var load = function () {
+    f.from = $('#dpF').value; f.to = $('#dpT').value; f.kind = $('#dpK').value;
+    loadInto($('#dpL'), api('debt.payments', f), function (rows) {
+      var tin = rows.filter(function (r) { return r.kind === 'AR' && r.type === 'PAY'; }).reduce(function (a, r) { return a + Number(r.amount); }, 0);
+      var tout = rows.filter(function (r) { return r.kind === 'AP' && r.type === 'PAY'; }).reduce(function (a, r) { return a + Number(r.amount); }, 0);
+      var tl = { PAY: 'Bayar', ADJUST: 'Penyesuaian', RETURN: 'Retur' };
+      $('#dpL').innerHTML = '<div class="kpis mb"><div class="kpi"><div class="l">Piutang diterima</div><div class="v" style="color:var(--ok)">' + rp(tin) + '</div></div><div class="kpi"><div class="l">Hutang dibayar</div><div class="v" style="color:var(--bad)">' + rp(tout) + '</div></div></div>' +
+        (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Waktu</th><th>No.</th><th>Jenis</th><th>Pihak</th><th>Metode</th><th class="right">Nominal</th><th>Oleh</th></tr></thead><tbody>' + rows.map(function (r) {
+          return '<tr><td>' + fmtDT(r.ts) + '</td><td class="mono" style="font-size:12px">' + esc(r.docNo) + '</td><td><span class="badge ' + (r.kind === 'AR' ? 'ok' : 'warn') + '">' + (r.kind === 'AR' ? 'Piutang' : 'Hutang') + '</span> ' + (tl[r.type] || r.type) + '</td><td>' + esc(r.partyName) + '</td><td>' + esc(r.method) + (r.ref ? ' <span class="faint">' + esc(r.ref) + '</span>' : '') + '</td><td class="right num">' + rp(r.amount) + '</td><td>' + esc(r.user) + '</td></tr>';
+        }).join('') + '</tbody></table></div>' : '<div class="empty">Belum ada pembayaran</div>');
+    });
+  };
+  $('#dpGo').onclick = load; load();
+}
+
+/* ---------- Kartu hutang/piutang per pihak ---------- */
+function openDebtParty(kind, partyId, partyName) {
+  var m = modal({ title: (kind === 'AR' ? 'Kartu Piutang — ' : 'Kartu Hutang — ') + esc(partyName), size: 'xl', body: '<div class="loading"><span class="spin"></span></div>' });
+  api('debt.party', { kind: kind, partyId: partyId, partyName: partyId ? '' : partyName }).then(function (d) {
+    var phone = (d.party && d.party.phone) || (d.docs[0] && d.docs[0].partyPhone) || '';
+    var openDocs = d.docs.filter(function (x) { return x.status === 'OPEN' || x.status === 'PARTIAL'; });
+    var mb = m.el.querySelector('.md-b');
+    mb.innerHTML = '<div class="kpis"><div class="kpi"><div class="l">Sisa ' + debtWord(kind) + '</div><div class="v">' + rp(d.outstanding) + '</div><div class="s">' + openDocs.length + ' dokumen terbuka</div></div>' +
+      (kind === 'AR' && d.party ? '<div class="kpi"><div class="l">Limit kredit</div><div class="v">' + (Number(d.party.creditLimit) ? rp(d.party.creditLimit) : 'Tanpa limit') + '</div><div class="s">Termin ' + (Number(d.party.termDays) || Number(st.boot.settings.arDueDays) || 30) + ' hari</div></div>' : '') +
+      (kind === 'AP' && d.party ? '<div class="kpi"><div class="l">Termin supplier</div><div class="v">' + esc(d.party.terms || '-') + '</div><div class="s">' + esc(d.party.phone || '') + '</div></div>' : '') + '</div>' +
+      '<h3 class="mt">Dokumen</h3><div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Tanggal</th><th>Jatuh tempo</th><th>Asal</th><th class="right">Nilai</th><th class="right">Dibayar</th><th class="right">Retur/penyesuaian</th><th class="right">Sisa</th><th>Status</th>' + (can('debt.manage') ? '<th></th>' : '') + '</tr></thead><tbody>' +
+      d.docs.map(function (x) {
+        var stt = DEBT_STATUS[x.status] || [x.status, ''];
+        var open = x.status === 'OPEN' || x.status === 'PARTIAL';
+        return '<tr><td class="mono" style="font-size:12px">' + esc(x.docNo) + '</td><td>' + fmtD(x.date) + '</td><td>' + dueBadge(x) + '</td><td style="font-size:12px">' + esc(refLabel(x)) + (x.notes ? '<div class="faint">' + esc(x.notes) + '</div>' : '') + '</td><td class="right num">' + rp(x.amount) + '</td><td class="right num">' + rp(x.paid) + '</td><td class="right num">' + (Number(x.adjusted) ? rp(x.adjusted) : '-') + '</td><td class="right num"><b>' + rp(x.balance) + '</b></td><td><span class="badge ' + stt[1] + '">' + stt[0] + '</span></td>' +
+          (can('debt.manage') ? '<td class="right">' + (open ? '<button class="btn sm" data-pay="' + x.id + '">Bayar</button> <button class="btn sm ghost" data-adj="' + x.id + '">' + (String(x.refType).indexOf('MANUAL') === 0 && !Number(x.paid) ? 'Batal/Sesuaikan' : 'Sesuaikan') + '</button>' : '') + '</td>' : '') + '</tr>';
+      }).join('') + '</tbody></table></div>' +
+      '<h3 class="mt">Riwayat pembayaran</h3>' + (d.pays.length ? '<div class="tbl-wrap"><table class="tbl"><tbody>' + d.pays.map(function (p) {
+        return '<tr><td>' + fmtDT(p.ts) + '</td><td class="mono" style="font-size:12px">' + esc(p.docNo) + '</td><td>' + esc({ PAY: 'Bayar', ADJUST: 'Penyesuaian', RETURN: 'Retur barang' }[p.type] || p.type) + ' · ' + esc(p.method) + (p.notes ? ' — ' + esc(p.notes) : '') + '</td><td class="right num">' + rp(p.amount) + '</td><td>' + esc(p.user) + '</td></tr>';
+      }).join('') + '</tbody></table></div>' : '<div class="faint">Belum ada pembayaran</div>');
+    var foot = document.createElement('div'); foot.className = 'md-f';
+    foot.innerHTML = '<button class="btn" id="dpStmt">' + ic('printer') + 'Cetak kartu</button>' +
+      (kind === 'AR' && phone && d.outstanding ? '<a class="btn" target="_blank" id="dpWa">' + ic('chat') + 'Tagih via WA</a>' : '') +
+      (d.outstanding && can(kind === 'AR' ? 'ar.collect' : 'debt.manage') ? '<button class="btn primary" id="dpPay">' + ic('wallet') + (kind === 'AR' ? 'Terima pembayaran' : 'Bayar hutang') + '</button>' : '');
+    m.el.querySelector('.md').appendChild(foot);
+    var reopen = function () { m.close(); openDebtParty(kind, partyId, partyName); if (st.view === 'debts') VIEWS.debts($('#view')); };
+    var pb = m.$('#dpPay'); if (pb) pb.onclick = function () { debtPayModal(kind, { partyId: partyId, partyName: d.partyName, outstanding: d.outstanding, phone: phone }).then(function (r) { if (r) reopen(); }); };
+    m.$$('[data-pay]').forEach(function (b) { b.onclick = function () { var x = d.docs.filter(function (y) { return y.id === b.dataset.pay; })[0]; debtPayModal(kind, { partyId: partyId, partyName: d.partyName, outstanding: x.balance, debtId: x.id, docNo: x.docNo, phone: phone }).then(function (r) { if (r) reopen(); }); }; });
+    m.$$('[data-adj]').forEach(function (b) { b.onclick = function () { debtAdjustModal(d.docs.filter(function (y) { return y.id === b.dataset.adj; })[0]).then(function (r) { if (r) reopen(); }); }; });
+    var wa = m.$('#dpWa');
+    if (wa) wa.href = waLink(phone, 'Yth. ' + d.partyName + ',\nBerikut rincian tagihan Anda di ' + st.boot.settings.storeName + ':\n' +
+      openDocs.map(function (x) { return '• ' + x.docNo + ' (' + fmtD(x.date) + ') sisa ' + rp(x.balance) + ', jatuh tempo ' + fmtD(x.dueDate); }).join('\n') + '\n*Total: ' + rp(d.outstanding) + '*\n\nMohon dapat dilunasi sebelum jatuh tempo. Terima kasih 🙏');
+    m.$('#dpStmt').onclick = function () { printDebtStatement(kind, d); };
+  }, function (e) { m.el.querySelector('.md-b').innerHTML = '<div class="alert bad">' + esc(e.message) + '</div>'; });
+}
+
+/* ---------- Terima / bayar ---------- */
+function debtPayModal(kind, o) {
+  return new Promise(function (resolve) {
+    var methods = kind === 'AR' ? AR_METHODS : AP_METHODS;
+    var shiftHere = st.shift && st.shift.outletId === st.outletId && st.shift.status !== 'CLOSED';
+    var m = modal({
+      title: kind === 'AR' ? 'Terima Pembayaran Piutang' : 'Bayar Hutang Supplier',
+      body: '<div class="paytotal"><div class="l">' + esc(o.partyName) + (o.docNo ? ' · ' + esc(o.docNo) : '') + '</div><div class="v">' + rp(o.outstanding) + '</div><div class="faint" style="font-size:12px">sisa ' + debtWord(kind) + (o.docNo ? ' dokumen ini' : ' (dialokasikan ke dokumen tertua lebih dulu)') + '</div></div>' +
+        '<label class="f">Nominal<input class="input big" id="dyA" inputmode="numeric" value="' + o.outstanding + '" autofocus></label>' +
+        '<div class="quick mt"><button class="btn sm" data-p="1">Lunas</button><button class="btn sm" data-p="0.5">50%</button><button class="btn sm" data-p="0.25">25%</button></div>' +
+        '<label class="f mt">' + (kind === 'AR' ? 'Diterima via' : 'Dibayar dari') + '<select class="input" id="dyM">' + opts(methods.map(function (x) { return { id: x[0], name: x[1] }; }), 'CASH') + '</select></label>' +
+        '<div class="faint" id="dyHint" style="font-size:12px;margin-top:4px"></div>' +
+        '<div class="grid2 mt"><label class="f">No. referensi / bukti<input class="input" id="dyR"></label><label class="f">Catatan<input class="input" id="dyN"></label></div>',
+      foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="dyOk">' + ic('check') + 'Simpan</button>',
+      onClose: function (v) { resolve(v || null); }
+    });
+    var hint = function () {
+      var cash = m.$('#dyM').value === 'CASH';
+      m.$('#dyHint').innerHTML = cash ? (shiftHere ? 'Uang ' + (kind === 'AR' ? 'masuk ke' : 'diambil dari') + ' laci shift ' + esc(st.shift.register) + ' — tercatat di laporan shift.' : '<span style="color:var(--warn)">Tidak ada shift terbuka di perangkat ini; dicatat sebagai kas toko tanpa shift.</span>') : '';
+    };
+    m.$('#dyM').onchange = hint; hint();
+    m.$$('[data-p]').forEach(function (b) { b.onclick = function () { m.$('#dyA').value = Math.round(o.outstanding * Number(b.dataset.p)); }; });
+    m.$('#dyOk').onclick = function () {
+      var amt = Math.round(num(m.$('#dyA').value));
+      if (amt <= 0) return toast('Isi nominal', 'bad');
+      if (amt > o.outstanding) return toast('Melebihi sisa ' + debtWord(kind) + ' ' + rp(o.outstanding), 'bad');
+      var method = m.$('#dyM').value;
+      var data = {
+        id: uuid(), kind: kind, partyId: o.partyId || '', partyName: o.partyName, debtId: o.debtId || '', amount: amt, method: method,
+        ref: m.$('#dyR').value.trim(), notes: m.$('#dyN').value.trim(), outletId: st.outletId, shiftId: method === 'CASH' && shiftHere ? st.shift.id : '',
+        ts: new Date().toISOString(), userName: st.user.fullName, docNo: kind === 'AR' ? nextKwitansiNo() : ''
+      };
+      var applyLocal = function () {
+        if (method === 'CASH' && shiftHere) {
+          if (kind === 'AR') st.shift.cashIn = (Number(st.shift.cashIn) || 0) + amt; else st.shift.cashOut = (Number(st.shift.cashOut) || 0) + amt;
+          kv.set('shift', st.shift);
+        }
+        if (kind === 'AR') (st.boot.customers || []).forEach(function (c) { if (c.id === o.partyId) c.arBalance = Math.max(0, (Number(c.arBalance) || 0) - amt); });
+        saveBootCache();
+      };
+      var done = function (offline) {
+        applyLocal();
+        toast((kind === 'AR' ? 'Pembayaran diterima ' : 'Hutang dibayar ') + rp(amt) + (offline ? ' — tersimpan offline, dikirim saat online' : ''), 'ok', 4000);
+        m.close(data);
+        if (kind === 'AR') showKwitansi(data, o);
+      };
+      // piutang tunai/nontunai dari kasir boleh offline (antrean); hutang selalu online
+      if (kind === 'AR' && (!st.online)) { enqueue('debt.pay', data); return done(true); }
+      run(m.$('#dyOk'), api('debt.pay', data)).then(function (r) { data.docNo = r.docNo; done(false); }, function (e) {
+        if (e.network && kind === 'AR') { enqueue('debt.pay', data); done(true); }
+      });
+    };
+  });
+}
+function nextKwitansiNo() {
+  var p = dparts(), ymd = p.year.slice(2) + p.month + p.day;
+  var key = 'kwt.' + st.outletId + '.' + st.device.register + '.' + ymd;
+  var n = (ls.get(key, 0) || 0) + 1; ls.set(key, n);
+  return 'KW-' + (outlet().code || 'TK') + '-' + st.device.register + '-' + ymd + '-' + String(n).padStart(3, '0');
+}
+function kwitansiHtml(d, o) {
+  var S = st.boot.settings, w = st.device.paper === 80 ? '' : 'w58';
+  var rest = Math.max(0, Number(o.outstanding) - Number(d.amount));
+  var ml = { CASH: 'Tunai', TRANSFER: 'Transfer', QRIS: 'QRIS', DEBIT: 'Debit' };
+  return '<div class="rcpt ' + w + '"><div class="c big">' + esc(S.storeName) + '</div><div class="c">' + esc(outlet().name || '') + '</div><hr><div class="c big">BUKTI PEMBAYARAN</div><hr><table>' +
+    '<tr><td>No</td><td class="r">' + esc(d.docNo) + '</td></tr><tr><td>Tgl</td><td class="r">' + fmtDT(d.ts) + '</td></tr><tr><td>Dari</td><td class="r">' + esc(o.partyName) + '</td></tr>' +
+    (o.docNo ? '<tr><td>Untuk</td><td class="r">' + esc(o.docNo) + '</td></tr>' : '') + '<tr><td>Via</td><td class="r">' + (ml[d.method] || d.method) + '</td></tr></table><hr><table>' +
+    '<tr><td class="big">DIBAYAR</td><td class="r big">' + rp(d.amount, 1) + '</td></tr><tr><td>Sisa piutang</td><td class="r">' + rp(rest, 1) + '</td></tr></table><hr>' +
+    '<div class="c">' + (rest ? 'Terima kasih atas pembayarannya.' : 'LUNAS — terima kasih!') + '</div><div class="c" style="margin-top:20px">Kasir: ' + esc(st.user.fullName) + '</div></div>';
+}
+function showKwitansi(d, o) {
+  var rest = Math.max(0, Number(o.outstanding) - Number(d.amount));
+  var m = modal({
+    title: 'Bukti Pembayaran', body: '<div class="rcpt-prev">' + kwitansiHtml(d, o) + '</div>',
+    foot: (o.phone ? '<a class="btn" target="_blank" href="' + waLink(o.phone, 'Terima kasih ' + o.partyName + ', pembayaran Rp' + rp(d.amount, 1) + ' (' + d.docNo + ') sudah kami terima. Sisa piutang: ' + rp(rest) + '.') + '">' + ic('chat') + 'WA</a>' : '') +
+      '<button class="btn" id="kwP">' + ic('printer') + 'Cetak</button><button class="btn primary" data-close>Selesai</button>'
+  });
+  m.$('#kwP').onclick = function () {
+    $('#print-area').innerHTML = '<style>@page{size:' + (st.device.paper === 80 ? '80mm' : '58mm') + ' auto;margin:2mm}</style>' + kwitansiHtml(d, o);
+    setTimeout(function () { window.print(); }, 50);
+  };
+}
+
+/** Dari layar kasir: pilih pelanggan yang punya kasbon lalu terima pembayaran (bisa offline). */
+function collectArAtPos() {
+  var list = (st.boot.customers || []).filter(function (c) { return Number(c.arBalance) > 0; }).sort(function (a, b) { return b.arBalance - a.arBalance; });
+  var m = modal({
+    title: 'Terima Bayar Kasbon', body: '<input class="input" id="caQ" placeholder="Cari nama / no. HP" autofocus><div id="caL" class="mt" style="max-height:52vh;overflow:auto"></div>' +
+      (st.online ? '' : '<p class="faint" style="font-size:12px">Offline — saldo kasbon dari data tersimpan terakhir.</p>')
+  });
+  var draw = function () {
+    var q = m.$('#caQ').value.toLowerCase();
+    var rows = list.filter(function (c) { return !q || (c.name + ' ' + c.phone).toLowerCase().indexOf(q) >= 0; });
+    m.$('#caL').innerHTML = rows.map(function (c) { return '<div class="list-item" style="cursor:pointer" data-id="' + c.id + '"><div class="grow"><b>' + esc(c.name) + '</b><div class="faint" style="font-size:12px">' + esc(c.phone || '-') + '</div></div><span class="badge warn">' + rp(c.arBalance) + '</span></div>'; }).join('') || '<div class="empty">Tidak ada pelanggan dengan kasbon</div>';
+    m.$$('[data-id]').forEach(function (r) {
+      r.onclick = function () {
+        var c = list.filter(function (x) { return x.id === r.dataset.id; })[0];
+        m.close();
+        debtPayModal('AR', { partyId: c.id, partyName: c.name, outstanding: Number(c.arBalance), phone: c.phone });
+      };
+    });
+  };
+  m.$('#caQ').oninput = draw; draw();
+}
+
+/* ---------- Catat manual & penyesuaian ---------- */
+function debtManualModal(kind) {
+  var types = kind === 'AR' ? [['OPENING', 'Saldo awal piutang (sebelum pakai aplikasi)'], ['CASH_LOAN', 'Kasbon uang tunai (keluar dari laci)'], ['OTHER', 'Piutang lain-lain']]
+    : [['OPENING', 'Saldo awal hutang (sebelum pakai aplikasi)'], ['EXPENSE', 'Tagihan biaya (listrik, sewa, jasa…)'], ['PURCHASE', 'Pembelian barang di luar sistem']];
+  var parties = kind === 'AR' ? (st.boot.customers || []) : (st.boot.suppliers || []);
+  var m = modal({
+    title: 'Catat ' + debtWord(kind) + ' manual', size: 'wide',
+    body: '<form id="dmF" class="col"><label class="f">Jenis<select class="input" name="type">' + opts(types.map(function (t) { return { id: t[0], name: t[1] }; }), types[0][0]) + '</select></label>' +
+      '<div class="grid2"><label class="f">' + (kind === 'AR' ? 'Pelanggan (member)' : 'Supplier') + '<select class="input" name="partyId">' + opts(parties, '', 'id', 'name', '— pihak lain (isi nama) —') + '</select></label><label class="f">Nama pihak lain<input class="input" name="partyName" placeholder="mis. PLN, Pak Ujang"></label></div>' +
+      '<div class="grid3"><label class="f">Nominal<input class="input" name="amount" data-num inputmode="numeric" required></label><label class="f">Tanggal<input class="input" type="date" name="date" value="' + today() + '"></label><label class="f">Jatuh tempo<input class="input" type="date" name="dueDate" value="' + dateAdd(today(), 30) + '"></label></div>' +
+      '<div class="grid2"><label class="f">No. bukti / faktur<input class="input" name="refNo"></label><label class="f">Catatan<input class="input" name="notes"></label></div></form>',
+    foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="dmOk">Simpan</button>'
+  });
+  m.$('#dmOk').onclick = function () {
+    var d = formData(m.$('#dmF')); d.kind = kind; d.outletId = st.outletId;
+    if (d.partyId) { var p = parties.filter(function (x) { return x.id === d.partyId; })[0]; d.partyName = p ? p.name : d.partyName; }
+    if (!d.partyName) return toast('Pilih atau isi nama pihak', 'bad');
+    run(m.$('#dmOk'), api('debt.manual', d), 'Tersimpan').then(function (r) {
+      if (kind === 'AR') (st.boot.customers || []).forEach(function (c) { if (c.id === d.partyId) c.arBalance = (Number(c.arBalance) || 0) + Number(r.amount); });
+      if (kind === 'AR' && d.type === 'CASH_LOAN' && st.shift && st.shift.outletId === st.outletId) { st.shift.cashOut = (Number(st.shift.cashOut) || 0) + Number(r.amount); kv.set('shift', st.shift); }
+      saveBootCache(); m.close(); go('debts');
+    });
+  };
+}
+function debtAdjustModal(x) {
+  return new Promise(function (resolve) {
+    var manual = String(x.refType).indexOf('MANUAL') === 0 && !Number(x.paid);
+    var m = modal({
+      title: 'Penyesuaian ' + esc(x.docNo),
+      body: '<p class="muted" style="margin-top:0">Sisa ' + rp(x.balance) + '. ' + (x.kind === 'AR' ? 'Penghapusan piutang tak tertagih dicatat sebagai beban.' : 'Potongan/diskon dari supplier dicatat sebagai pendapatan lain.') + '</p>' +
+        (manual ? '<label class="chk"><input type="checkbox" id="daC"> Batalkan dokumen manual ini (salah input)</label>' : '') +
+        '<label class="f mt">Nominal penyesuaian<input class="input" id="daA" inputmode="numeric" value="' + x.balance + '"></label><label class="f mt">Alasan (wajib)<input class="input" id="daR"></label>',
+      foot: '<button class="btn" data-close>Batal</button><button class="btn danger solid" id="daOk">Simpan</button>',
+      onClose: function (v) { resolve(v || null); }
+    });
+    m.$('#daOk').onclick = function () {
+      var cancel = m.$('#daC') && m.$('#daC').checked;
+      run(m.$('#daOk'), api('debt.adjust', { id: x.id, act: cancel ? 'cancel' : 'adjust', amount: num(m.$('#daA').value), reason: m.$('#daR').value.trim() }), 'Penyesuaian tersimpan').then(function (r) {
+        if (x.kind === 'AR') loadBoot('silent');
+        m.close(r);
+      });
+    };
+  });
+}
+function printDebtStatement(kind, d) {
+  var S = st.boot.settings;
+  $('#print-area').innerHTML = '<style>@page{size:A4;margin:14mm}</style><div style="font-family:Arial,sans-serif;color:#000;font-size:12px"><h2 style="margin:0">KARTU ' + (kind === 'AR' ? 'PIUTANG' : 'HUTANG') + '</h2><p>' + esc(S.storeName) + ' — dicetak ' + fmtDT(new Date().toISOString()) + '</p>' +
+    '<p><b>' + esc(d.partyName) + '</b>' + (d.party && d.party.phone ? '<br>' + esc(d.party.phone) : '') + '</p>' +
+    '<table style="width:100%;border-collapse:collapse" border="1" cellpadding="5"><tr><th>No.</th><th>Tanggal</th><th>Jatuh tempo</th><th>Keterangan</th><th>Nilai</th><th>Dibayar</th><th>Retur/penyesuaian</th><th>Sisa</th></tr>' +
+    d.docs.filter(function (x) { return x.status !== 'VOID'; }).map(function (x) { return '<tr><td>' + esc(x.docNo) + '</td><td>' + fmtD(x.date) + '</td><td>' + fmtD(x.dueDate) + '</td><td>' + esc(refLabel(x)) + '</td><td align="right">' + rp(x.amount) + '</td><td align="right">' + rp(x.paid) + '</td><td align="right">' + rp(x.adjusted) + '</td><td align="right"><b>' + rp(x.balance) + '</b></td></tr>'; }).join('') +
+    '<tr><td colspan="7" align="right"><b>TOTAL SISA</b></td><td align="right"><b>' + rp(d.outstanding) + '</b></td></tr></table>' +
+    '<table style="width:100%;margin-top:40px;text-align:center"><tr><td>Hormat kami<br><br><br><br>(' + esc(st.user.fullName) + ')</td><td>' + (kind === 'AR' ? 'Pelanggan' : 'Supplier') + '<br><br><br><br>(' + esc(d.partyName) + ')</td></tr></table></div>';
+  setTimeout(function () { window.print(); }, 50);
 }
 
 /* ===================== Laporan ===================== */
@@ -2882,7 +3281,7 @@ REPORTS.shift = function (el) {
             title: 'Shift ' + esc(r.register) + ' — ' + esc(r.cashierName), size: 'wide',
             body: '<div class="kpis"><div class="kpi"><div class="l">Penjualan</div><div class="v">' + r.salesCount + '</div><div class="s">void ' + r.voidCount + '</div></div><div class="kpi"><div class="l">Kas seharusnya</div><div class="v">' + rp(r.expectedCash) + '</div></div><div class="kpi"><div class="l">Kas fisik</div><div class="v">' + (r.actualCash === '' ? '-' : rp(r.actualCash)) + '</div></div><div class="kpi"><div class="l">Selisih</div><div class="v">' + rp(r.discrepancy || 0) + '</div></div></div>' +
               '<h3 class="mt">Per metode bayar</h3>' + Object.keys(r.payments).map(function (k) { return '<div class="sumrow"><span>' + k + '</span><b>' + rp(r.payments[k]) + '</b></div>'; }).join('') +
-              '<h3 class="mt">Mutasi kas</h3>' + (r.moves.length ? r.moves.map(function (x) { return '<div class="sumrow"><span>' + fmtT(x.ts) + ' ' + esc(x.type) + ' — ' + esc(x.notes) + '</span><b>' + rp(x.amount) + '</b></div>'; }).join('') : '<div class="faint">-</div>'),
+              '<h3 class="mt">Mutasi kas</h3>' + (r.moves.length ? r.moves.map(function (x) { return '<div class="sumrow"><span>' + fmtT(x.ts) + ' ' + esc({ DROP: 'Setor kas', PAYOUT: 'Kas keluar', PAYIN: 'Kas masuk', AR_PAY: 'Terima piutang', AP_PAY: 'Bayar hutang', AR_LOAN: 'Kasbon uang' }[x.type] || x.type) + ' — ' + esc(x.notes) + '</span><b>' + rp(x.amount) + '</b></div>'; }).join('') : '<div class="faint">-</div>'),
             foot: '<button class="btn" id="srP">' + ic('printer') + 'Cetak</button>'
           });
           m.$('#srP').onclick = function () { printShift(r, r.status === 'OPEN' ? 'X' : 'Z'); };
@@ -3009,10 +3408,11 @@ SETTINGS.tax = function (el) {
     '<label class="f">Batas diskon kasir tanpa PIN (%)<input class="input" type="number" min="0" max="100" name="maxCashierDiscPct" value="' + s.maxCashierDiscPct + '"></label>' +
     '<label class="chk" style="align-self:end"><input type="checkbox" name="allowNegativeStock"' + (s.allowNegativeStock ? ' checked' : '') + '> Izinkan stok minus tanpa tanda</label></div>' +
     '<h3>Poin member</h3><div class="grid2"><label class="f">Belanja per 1 poin (Rp)<input class="input" name="pointsPerRp" data-num value="' + s.pointsPerRp + '"></label><label class="f">Nilai tukar 1 poin (Rp, 0 = nonaktif)<input class="input" name="pointValue" data-num value="' + s.pointValue + '"></label></div>' +
+    (hasFeat('debt') ? '<h3>Penjualan tempo / kasbon</h3><div class="grid2"><label class="chk"><input type="checkbox" name="arEnabled"' + (s.arEnabled !== false ? ' checked' : '') + '> Izinkan kasir menjual tempo/kasbon ke member</label><label class="f">Jatuh tempo default (hari)<input class="input" type="number" min="0" max="365" name="arDueDays" value="' + (s.arDueDays || 30) + '"></label></div><p class="faint" style="margin:0;font-size:12.5px">Limit kasbon & termin per pelanggan diatur di Member & Promo › klik nama member. Melebihi limit wajib PIN supervisor.</p>' : '') +
     '<h3>Pembayaran non-tunai</h3><label class="f">Gambar QRIS statis toko (ditampilkan saat bayar QRIS)' + imgPicker('qrisImage', s.qrisImage, 720) + '</label>' +
     '<div class="grid3"><label class="f">MDR QRIS (%)<input class="input" type="number" step="0.01" name="mdrQris" value="' + s.mdrQris + '"></label><label class="f">MDR Debit (%)<input class="input" type="number" step="0.01" name="mdrDebit" value="' + s.mdrDebit + '"></label><label class="f">MDR Kredit (%)<input class="input" type="number" step="0.01" name="mdrCredit" value="' + s.mdrCredit + '"></label></div>' +
     '<label class="chk"><input type="checkbox" name="qrisMicroFree"' + (s.qrisMicroFree ? ' checked' : '') + '> Usaha mikro: MDR QRIS 0% untuk transaksi ≤ Rp500.000 (cek ketentuan PJP/acquirer Anda)</label>',
-    ['taxEnabled', 'taxRate', 'taxMode', 'roundTo', 'maxCashierDiscPct', 'allowNegativeStock', 'pointsPerRp', 'pointValue', 'qrisImage', 'mdrQris', 'mdrDebit', 'mdrCredit', 'qrisMicroFree'],
+    ['arEnabled', 'arDueDays', 'taxEnabled', 'taxRate', 'taxMode', 'roundTo', 'maxCashierDiscPct', 'allowNegativeStock', 'pointsPerRp', 'pointValue', 'qrisImage', 'mdrQris', 'mdrDebit', 'mdrCredit', 'qrisMicroFree'],
     function (p) { p.roundTo = Number(p.roundTo); });
   bindImgPickers(el);
 };
@@ -3125,7 +3525,7 @@ SETTINGS.license = function (el) {
   var l = st.boot.license;
   var lim = function (n) { return n >= 999 && n !== 5000 && n < 100000 ? 'tak terbatas' : Number(n).toLocaleString('id-ID'); };
   var T = [['LITE', 'Lite', 'Gratis', ['1 outlet', '3 pengguna', '300 produk', 'Kasir offline + struk', 'Stok & laporan harian']],
-  ['PRO', 'Pro', 'Rp149.000/bln per outlet atau Rp1.490.000/thn', ['3 outlet', '15 pengguna', '5.000 produk', 'Promo, member & poin', 'Opname, PO, transfer', 'Ekspor CSV, laporan WhatsApp']],
+  ['PRO', 'Pro', 'Rp149.000/bln per outlet atau Rp1.490.000/thn', ['3 outlet', '15 pengguna', '5.000 produk', 'Promo, member & poin', 'Opname, PO, transfer', 'Hutang & piutang (jual tempo/kasbon)', 'Ekspor CSV, laporan WhatsApp']],
   ['ENTERPRISE', 'Enterprise', 'Rp4.900.000 sekali bayar (≤10 outlet) + perpanjangan update Rp990.000/thn', ['Outlet & pengguna tak terbatas*', 'Jurnal & neraca saldo', 'Verifikasi rantai audit', 'Konsolidasi multi-outlet', 'Backup otomatis', 'Tanpa label "Powered by"']]];
   el.innerHTML = '<div class="card mb"><div class="row wrap between"><div><div class="faint">Paket aktif</div><h2>' + esc(l.label) + '</h2><div class="faint" style="font-size:12.5px">' + (l.holder ? 'a.n. ' + esc(l.holder) + ' · ' : '') + (l.expires ? 'berlaku s/d ' + fmtD(l.expires) : (l.source === 'trial' ? 'sisa uji coba ' + l.trialDaysLeft + ' hari' : (l.source === 'key' ? 'tanpa batas waktu' : ''))) + (l.expiredKey ? ' · <span style="color:var(--bad)">kunci kedaluwarsa ' + fmtD(l.expiredKey) + '</span>' : '') + '</div></div>' +
     '<div class="faint" style="font-size:12.5px">Batas: ' + lim(l.limits.outlets) + ' outlet · ' + lim(l.limits.users) + ' pengguna · ' + lim(l.limits.products) + ' produk</div></div>' +
@@ -3162,7 +3562,7 @@ var LEGAL = {
   oss: ['Lisensi Pihak Ketiga',
     '<ul><li><b>JsBarcode</b> 3.11.6 — MIT License © Johan Lindell (dimuat dari cdnjs saat mencetak label).</li><li><b>ZXing JS (@zxing/library)</b> 0.21.3 — Apache License 2.0 (dimuat dari jsDelivr hanya bila browser tidak mendukung BarcodeDetector).</li><li>Ikon antarmuka digambar khusus untuk aplikasi ini.</li><li>Google Apps Script, Google Sheets, Google Drive — tunduk pada Ketentuan Layanan Google.</li></ul><p>Tidak ada kode dari versi React asli (React, Tailwind, lucide-react, motion, Express, Prisma) yang disertakan dalam edisi ini.</p>'],
   changelog: ['Riwayat Versi',
-    '<h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
+    '<h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
 };
 function showLegal(k) { var l = LEGAL[k]; modal({ title: l[0], size: 'wide', body: '<div class="legal">' + l[1] + '</div>' }); }
 
