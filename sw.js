@@ -1,14 +1,16 @@
 /* Retail POS Enterprise — Service Worker (mode offline PWA)
  * Naikkan VERSION setiap kali index.html diperbarui agar perangkat kasir mengambil versi baru. */
-var VERSION = 'rpos-v1.2.0';
+var VERSION = 'rpos-v1.2.1';
 var SHELL = ['./', './index.html', './manifest.json', './offline.html', './icon-512.png'];
 var CDN = ['https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js'];
 
 self.addEventListener('install', function (e) {
+  // toleran: satu berkas gagal diunduh tidak menggagalkan pemasangan service worker
   e.waitUntil(caches.open(VERSION).then(function (c) {
-    return c.addAll(SHELL).then(function () {
-      return Promise.all(CDN.map(function (u) { return fetch(u, { mode: 'cors' }).then(function (r) { if (r.ok) return c.put(u, r); }).catch(function () { }); }));
-    });
+    return Promise.all(SHELL.concat(CDN).map(function (u) {
+      return fetch(u, { cache: 'reload', mode: u.indexOf('http') === 0 ? 'cors' : 'same-origin' })
+        .then(function (r) { if (r.ok) return c.put(u, r); }).catch(function () { });
+    }));
   }).then(function () { return self.skipWaiting(); }));
 });
 

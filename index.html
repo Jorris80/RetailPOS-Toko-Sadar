@@ -8,6 +8,9 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="description" content="Retail POS Enterprise — kasir multi-cabang berbasis Google Sheets dengan mode offline">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-512.png">
+<link rel="apple-touch-icon" href="icon-512.png">
 <title>Retail POS Enterprise</title>
 <style>
 :root{
@@ -457,7 +460,7 @@ function RPOS_calcCart(cart, ctx) {
 <script>
 /* ===================== Retail POS Enterprise — Klien (inti) ===================== */
 'use strict';
-var APP_VERSION = '1.2.0';
+var APP_VERSION = '1.2.1';
 var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 
 /* ---------- Utilitas ---------- */
@@ -837,7 +840,8 @@ function renderAuth(mode, info) {
       '<button class="btn primary lg block">Masuk</button></form>' +
       '<div class="row between mt faint" style="font-size:12px"><span>v' + APP_VERSION + (IS_GAS ? '' : ' · <a href="#" id="lnkUrl">Ganti server</a>') + '</span><a href="#" id="lnkTheme">' + ic('moon', 'sm') + '</a></div>';
   }
-  $('#app').innerHTML = '<div class="auth"><div class="card">' + body + '<div id="authMsg" class="mt"></div></div></div>';
+  $('#app').innerHTML = '<div class="auth"><div class="card">' + body + '<div id="authMsg" class="mt"></div>' + (mode === 'login' ? installBtnHtml('authInstall') : '') + '</div></div>';
+  if (mode === 'login') paintInstallButtons();
   var msg = function (t, cls) { $('#authMsg').innerHTML = t ? '<div class="alert ' + (cls || 'bad') + '">' + esc(t) + '</div>' : ''; };
   var f;
   if ((f = $('#fUrl'))) f.onsubmit = function (e) {
@@ -3337,6 +3341,124 @@ VIEWS.audit = function (el) {
   load();
 };
 
+/* ===================== Instal aplikasi (PWA) & pemeriksa kesiapan ===================== */
+var pwaState = { prompt: null, installed: false, swError: '' };
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault();               // simpan, tampilkan lewat tombol "Instal aplikasi" milik kita
+  pwaState.prompt = e;
+  paintInstallButtons();
+});
+window.addEventListener('appinstalled', function () {
+  pwaState.prompt = null; pwaState.installed = true;
+  ls.set('pwaInstalledAt', new Date().toISOString());
+  paintInstallButtons();
+  toast('Aplikasi terpasang. Buka dari ikon "Retail POS" di layar utama.', 'ok', 6000);
+});
+function isStandalone() { return (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true; }
+function uaInfo() {
+  var ua = navigator.userAgent || '';
+  return {
+    android: /Android/i.test(ua), ios: /iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1),
+    inApp: /FBAN|FBAV|Instagram|Line\/|Telegram|TikTok|musical_ly|GSA\/|; wv\)/i.test(ua),
+    samsung: /SamsungBrowser/i.test(ua), miui: /MiuiBrowser|XiaoMi|Redmi|POCO/i.test(ua), oppoVivo: /HeyTapBrowser|OPPO|CPH\d|vivo|RMX\d/i.test(ua),
+    huawei: /HUAWEI|HONOR|HarmonyOS/i.test(ua), chrome: /Chrome\/\d+/.test(ua) && !/Edg|OPR|SamsungBrowser|MiuiBrowser|HeyTap|UCBrowser/i.test(ua)
+  };
+}
+function installBtnHtml(id) {
+  if (IS_GAS || isStandalone()) return '';
+  return '<button class="btn block mt" id="' + id + '" data-install>' + ic('download') + 'Instal aplikasi di perangkat ini</button>';
+}
+function paintInstallButtons() {
+  $$('[data-install]').forEach(function (b) {
+    b.classList.toggle('primary', !!pwaState.prompt);
+    b.onclick = installApp;
+  });
+}
+function installApp() {
+  if (pwaState.prompt) {
+    var p = pwaState.prompt;
+    p.prompt();
+    return p.userChoice.then(function (c) {
+      if (c.outcome === 'accepted') toast('Memasang aplikasi…', 'ok');
+      pwaState.prompt = null; paintInstallButtons();
+    });
+  }
+  showInstallHelp();
+}
+function showInstallHelp() {
+  var u = uaInfo();
+  var steps;
+  if (IS_GAS) {
+    steps = '<div class="alert warn">Anda membuka aplikasi dari <b>URL Apps Script</b>. Alamat ini dibungkus iframe Google sehingga <b>tidak bisa diinstal sebagai aplikasi</b> (pintasan layar utamanya sering memunculkan "Aplikasi tidak dapat dibuka"). Buka versi <b>GitHub Pages</b> (https://…github.io/…) di Chrome, lalu instal dari sana.</div>';
+  } else if (u.ios) {
+    steps = '<ol><li>Buka alamat ini di <b>Safari</b>.</li><li>Ketuk tombol <b>Bagikan</b> (kotak dengan panah ke atas).</li><li>Pilih <b>Tambah ke Layar Utama</b> → Tambah.</li></ol>';
+  } else {
+    steps = (u.inApp ? '<div class="alert bad">Halaman ini dibuka dari browser bawaan aplikasi lain (WhatsApp/Instagram/Telegram/Google). Ketuk menu ⋮ → <b>Buka di Chrome</b>, lalu instal dari Chrome.</div>' : '') +
+      (!u.chrome && u.android ? '<div class="alert warn">Gunakan <b>Google Chrome</b>. Browser lain (Mi Browser, Samsung Internet, HeyTap, UC) sering hanya membuat pintasan biasa yang gagal dibuka.</div>' : '') +
+      '<ol><li>Di Chrome, ketuk menu <b>⋮</b> → <b>Instal aplikasi</b> (bukan "Tambahkan ke layar utama" bila keduanya ada).</li>' +
+      '<li>Tunggu notifikasi "Aplikasi terpasang" (5–30 detik), lalu buka ikon <b>Retail POS</b>.</li></ol>' +
+      '<h3>Jika muncul "Aplikasi tidak dapat dibuka"</h3><ol>' +
+      '<li>Hapus ikon Retail POS lama dari layar utama (dan dari Setelan › Aplikasi bila terdaftar).</li>' +
+      (u.miui || u.oppoVivo || u.huawei || true ? '<li><b>Xiaomi/Redmi/POCO, OPPO, realme, vivo:</b> Setelan › Aplikasi › Chrome › Izin › <b>Pintasan layar utama / Buat pintasan desktop</b> → Izinkan. Matikan juga mode hemat baterai ketat untuk Chrome.</li>' : '') +
+      '<li>Perbarui <b>Chrome</b> dan <b>Layanan Google Play</b> di Play Store. Pastikan <b>Play Protect</b> tidak memblokir pemasangan.</li>' +
+      '<li>Chrome › ⋮ › Setelan › Setelan situs › Semua situs › hapus data situs github.io ini, buka lagi halaman, tunggu sampai tampil penuh, baru <b>Instal aplikasi</b>.</li>' +
+      '<li>HP <b>Huawei/Honor</b> tanpa Google Play: Chrome hanya bisa membuat pintasan. Alternatif: buat APK di <b>pwabuilder.com</b> dari alamat GitHub Pages Anda (Android Package) lalu pasang APK-nya.</li></ol>' +
+      '<p class="faint" style="font-size:12px">Tekan "Cek kesiapan instal" di Pengaturan › Perangkat untuk melihat bagian yang belum memenuhi syarat.</p>';
+  }
+  modal({ title: ic('download') + ' Cara instal aplikasi', size: 'wide', body: '<div class="legal">' + steps + '</div>', foot: '<button class="btn" id="ihCheck">Cek kesiapan instal</button><button class="btn primary" data-close>Tutup</button>' })
+    .$('#ihCheck').onclick = function () { closeTopModal(); runPwaCheck(); };
+}
+
+/** Pemeriksa kesiapan instal: menampilkan setiap syarat beserta hasilnya. */
+function runPwaCheck() {
+  var m = modal({ title: 'Cek kesiapan instal aplikasi', size: 'wide', body: '<div id="pcL"><div class="loading"><span class="spin"></span> Memeriksa…</div></div>' });
+  var rows = [];
+  var add = function (ok, label, detail) { rows.push({ ok: ok, label: label, detail: detail || '' }); };
+  var u = uaInfo();
+  add(!IS_GAS, 'Dibuka dari GitHub Pages (bukan URL Apps Script)', IS_GAS ? 'URL Apps Script tidak dapat diinstal. Buka alamat github.io.' : location.origin + location.pathname);
+  add(window.isSecureContext, 'Koneksi aman (HTTPS)', location.protocol);
+  add(!u.inApp, 'Dibuka di browser utama', u.inApp ? 'Terdeteksi browser dalam aplikasi lain — buka di Chrome.' : '');
+  if (u.android) add(u.chrome, 'Browser Google Chrome', u.chrome ? '' : 'Gunakan Chrome agar terpasang sebagai aplikasi (WebAPK).');
+  var linkEl = document.querySelector('link[rel="manifest"]');
+  add(!!linkEl, 'Tautan manifest di halaman', linkEl ? linkEl.href : 'tidak ditemukan');
+  var p1 = linkEl ? fetch(linkEl.href, { cache: 'no-store' }).then(function (r) {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function (j) {
+    var base = linkEl.href;
+    var start = new URL(j.start_url || '.', base).href, scope = new URL(j.scope || '.', base).href;
+    add(!!(j.name || j.short_name), 'Nama aplikasi', j.short_name || j.name);
+    add(['standalone', 'fullscreen', 'minimal-ui'].indexOf(j.display) >= 0, 'Mode tampilan', j.display);
+    add(start.indexOf(scope) === 0, 'start_url berada di dalam scope', start + ' ⊂ ' + scope);
+    add(new URL(start).origin === location.origin, 'start_url satu domain dengan halaman', start);
+    var icon = (j.icons || []).filter(function (i) { return /png/.test(i.type || i.src); })[0];
+    if (!icon) { add(false, 'Ikon PNG di manifest', 'tidak ada'); return; }
+    return new Promise(function (res) {
+      var img = new Image();
+      img.onload = function () { add(img.naturalWidth >= 192 && img.naturalWidth === img.naturalHeight, 'Ikon dapat dimuat, persegi, ≥192 px', img.naturalWidth + '×' + img.naturalHeight); res(); };
+      img.onerror = function () { add(false, 'Ikon dapat dimuat', new URL(icon.src, base).href + ' gagal dimuat — pastikan icon-512.png ikut diunggah'); res(); };
+      img.src = new URL(icon.src, base).href;
+    });
+  }).catch(function (e) { add(false, 'manifest.json dapat dibaca', e.message + ' — pastikan manifest.json ikut diunggah ke repositori yang sama'); }) : Promise.resolve();
+  var p2 = ('serviceWorker' in navigator) ? navigator.serviceWorker.getRegistration().then(function (r) {
+    add(!!(r && r.active), 'Service worker aktif', r ? r.scope : (pwaState.swError || 'belum terdaftar — muat ulang halaman'));
+    add(!!navigator.serviceWorker.controller, 'Halaman dikendalikan service worker (siap offline)', navigator.serviceWorker.controller ? '' : 'muat ulang halaman sekali');
+  }) : Promise.resolve(add(false, 'Browser mendukung service worker', 'tidak didukung'));
+  Promise.all([p1, p2]).then(function () {
+    add(true, 'Status pemasangan', isStandalone() ? 'Sedang berjalan sebagai aplikasi terpasang ✔' : (pwaState.prompt ? 'Siap — tekan "Instal sekarang"' : (ls.get('pwaInstalledAt') ? 'Pernah dipasang ' + fmtDT(ls.get('pwaInstalledAt')) : 'Tombol instal dari Chrome belum tersedia (bisa karena sudah terpasang atau perangkat membatasi)')));
+    var bad = rows.filter(function (r) { return !r.ok; }).length;
+    m.$('#pcL').innerHTML = '<div class="alert ' + (bad ? 'warn' : 'ok') + ' mb">' + (bad ? bad + ' syarat belum terpenuhi — perbaiki yang bertanda ✘.' : 'Semua syarat teknis terpenuhi. Bila tetap "Aplikasi tidak dapat dibuka", ikuti langkah di "Cara instal".') + '</div>' +
+      '<div class="tbl-wrap"><table class="tbl"><tbody>' + rows.map(function (r) {
+        return '<tr><td style="width:28px;color:' + (r.ok ? 'var(--ok)' : 'var(--bad)') + ';font-weight:800">' + (r.ok ? '✔' : '✘') + '</td><td><b>' + esc(r.label) + '</b>' + (r.detail ? '<div class="faint mono" style="font-size:11.5px;word-break:break-all">' + esc(r.detail) + '</div>' : '') + '</td></tr>';
+      }).join('') + '</tbody></table></div><div class="faint mt" style="font-size:11.5px;word-break:break-all">' + esc(navigator.userAgent) + '</div>';
+    var foot = document.createElement('div'); foot.className = 'md-f';
+    foot.innerHTML = '<button class="btn" id="pcHelp">Cara instal</button>' + (pwaState.prompt ? '<button class="btn primary" id="pcInst">' + ic('download') + 'Instal sekarang</button>' : '');
+    m.el.querySelector('.md').appendChild(foot);
+    m.$('#pcHelp').onclick = function () { m.close(); showInstallHelp(); };
+    var ib = m.$('#pcInst'); if (ib) ib.onclick = function () { m.close(); installApp(); };
+  });
+}
+
 /* ===================== Pengaturan ===================== */
 VIEWS.settings = function (el) {
   var tabs = [
@@ -3479,12 +3601,14 @@ SETTINGS.device = function (el) {
     '<label class="chk"><input type="checkbox" id="dvF"' + (d.showPhotos !== false ? ' checked' : '') + '> Tampilkan foto produk di kasir & daftar produk</label>' +
     (IS_GAS ? '' : '<label class="f">URL server Apps Script<input class="input mono" id="dvU" value="' + esc(d.apiUrl) + '"></label>') +
     '<button class="btn primary" id="dvSave">Simpan perangkat</button>' +
+    '<div class="row wrap">' + (isStandalone() ? '<span class="badge ok">' + ic('check', 'sm') + 'Berjalan sebagai aplikasi terpasang</span>' : '<button class="btn" data-install>' + ic('download') + 'Instal aplikasi</button>') + '<button class="btn" onclick="runPwaCheck()">' + ic('shield') + 'Cek kesiapan instal</button></div>' +
     '<div class="faint" style="font-size:12px">Pintasan: <span class="kbd">F2</span> cari produk · <span class="kbd">F9</span> bayar · scanner USB/Bluetooth langsung terbaca di layar Kasir.</div></div>' +
     '<div class="card col gap-lg"><h3>Akun saya</h3><div>' + esc(st.user.fullName) + ' · <span class="faint">' + esc(st.user.roleLabel) + '</span></div>' +
     '<form id="pwF" class="col"><input class="input" type="password" name="oldPassword" placeholder="Kata sandi lama" required><input class="input" type="password" name="newPassword" placeholder="Kata sandi baru (min. 6)" required minlength="6">' +
     (st.user.hasPin ? '<input class="input" name="pin" inputmode="numeric" maxlength="6" placeholder="PIN supervisor baru (wajib diisi ulang)">' : '') + '<button class="btn">Ganti kata sandi</button></form>' +
     '<h3>Sinkronisasi</h3><div class="row wrap"><span class="badge ' + (st.online ? 'ok' : 'bad') + '">' + (st.online ? 'Online' : 'Offline') + '</span><span class="badge">' + st.queue.length + ' antrean</span><span class="badge">' + st.localSales.length + ' struk lokal</span></div>' +
     '<div class="row wrap"><button class="btn" onclick="showSyncPanel()">' + ic('refresh') + 'Detail antrean</button><button class="btn danger" id="dvClr">Bersihkan cache perangkat</button></div></div></div>';
+  paintInstallButtons();
   $('#dvSave').onclick = function () {
     d.register = ($('#dvR').value || 'K1').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || 'K1';
     d.paper = Number($('#dvP').value); d.autoPrint = $('#dvA').checked; d.sound = $('#dvS').checked; d.showPhotos = $('#dvF').checked;
@@ -3562,27 +3686,32 @@ var LEGAL = {
   oss: ['Lisensi Pihak Ketiga',
     '<ul><li><b>JsBarcode</b> 3.11.6 — MIT License © Johan Lindell (dimuat dari cdnjs saat mencetak label).</li><li><b>ZXing JS (@zxing/library)</b> 0.21.3 — Apache License 2.0 (dimuat dari jsDelivr hanya bila browser tidak mendukung BarcodeDetector).</li><li>Ikon antarmuka digambar khusus untuk aplikasi ini.</li><li>Google Apps Script, Google Sheets, Google Drive — tunduk pada Ketentuan Layanan Google.</li></ul><p>Tidak ada kode dari versi React asli (React, Tailwind, lucide-react, motion, Express, Prisma) yang disertakan dalam edisi ini.</p>'],
   changelog: ['Riwayat Versi',
-    '<h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
+    '<h3>v1.2.1 — 16 Oktober 2026</h3><ul><li>PWA Android: manifest statis di halaman, service worker toleran berkas hilang, tombol "Instal aplikasi", pemeriksa kesiapan instal & panduan mengatasi "Aplikasi tidak dapat dibuka".</li></ul><h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
 };
 function showLegal(k) { var l = LEGAL[k]; modal({ title: l[0], size: 'wide', body: '<div class="legal">' + l[1] + '</div>' }); }
 
 </script>
 <script>
-/* PWA: manifest & service worker hanya saat dibuka dari GitHub Pages (bukan dari iframe Apps Script) */
+/* PWA: manifest & service worker hanya saat dibuka dari GitHub Pages (bukan dari iframe Apps Script).
+   Versi GitHub sudah memuat <link rel="manifest"> statis di <head>; injeksi di bawah hanya cadangan. */
 (function () {
   if (IS_GAS) return;
-  var l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.json'; document.head.appendChild(l);
-  var a = document.createElement('link'); a.rel = 'apple-touch-icon'; a.href = 'icon-512.png'; document.head.appendChild(a);
+  if (!document.querySelector('link[rel="manifest"]')) {
+    var l = document.createElement('link'); l.rel = 'manifest'; l.href = 'manifest.json'; document.head.appendChild(l);
+  }
+  if (!document.querySelector('link[rel="apple-touch-icon"]')) {
+    var a = document.createElement('link'); a.rel = 'apple-touch-icon'; a.href = 'icon-512.png'; document.head.appendChild(a);
+  }
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     window.addEventListener('load', function () {
-      navigator.serviceWorker.register('sw.js').then(function (reg) {
+      navigator.serviceWorker.register('sw.js', { scope: './' }).then(function (reg) {
         reg.addEventListener('updatefound', function () {
           var w = reg.installing;
           w && w.addEventListener('statechange', function () {
             if (w.state === 'installed' && navigator.serviceWorker.controller) toast('Versi baru tersedia — tutup & buka ulang aplikasi untuk memperbarui', 'ok', 6000);
           });
         });
-      }).catch(function () { });
+      }).catch(function (e) { pwaState.swError = e && e.message || String(e); });
     });
   }
 })();
