@@ -1,6 +1,8 @@
 /* Retail POS Enterprise — Service Worker (mode offline PWA)
  * Naikkan VERSION setiap kali index.html diperbarui agar perangkat kasir mengambil versi baru. */
-var VERSION = 'rpos-v1.3.0';
+var VERSION = 'rpos-v1.4.0';
+/* hanya hapus cache milik aplikasi ini — aplikasi lain di domain github.io yang sama tidak tersentuh */
+var CACHE_PREFIX = 'rpos-v';
 var SHELL = ['./', './index.html', './manifest.json', './offline.html', './icon-512.png'];
 var CDN = ['https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js'];
 
@@ -16,7 +18,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k !== VERSION; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return k.indexOf(CACHE_PREFIX) === 0 && k !== VERSION; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 

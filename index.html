@@ -179,6 +179,21 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13px}
 .segm button{flex:1;border:0;background:transparent;padding:8px 6px;border-radius:9px;font-weight:600;color:var(--ink-2);cursor:pointer;font-size:13px}
 .segm button.on{background:var(--panel);color:var(--brand);box-shadow:var(--shadow)}
 
+.nowrap{white-space:nowrap}
+/* panah geser untuk tab/chip yang meluber ke samping */
+.hs{position:relative;min-width:0;max-width:100%}
+.hs-b{position:absolute;top:0;bottom:0;width:34px;border:0;padding:0;display:flex;align-items:center;cursor:pointer;z-index:2;color:var(--ink);opacity:0;pointer-events:none;transition:opacity .15s}
+.hs-b.on{opacity:1;pointer-events:auto}
+.hs-b .ico{width:22px;height:22px;background:var(--panel);border:1px solid var(--line);border-radius:50%;padding:3px;box-shadow:0 2px 8px -2px #0004}
+.hs-b.l{left:0;justify-content:flex-start;background:linear-gradient(90deg,var(--bg) 35%,transparent);border-radius:12px 0 0 12px}
+.hs-b.r{right:0;justify-content:flex-end;background:linear-gradient(270deg,var(--bg) 35%,transparent);border-radius:0 12px 12px 0}
+.hs > .tabs + .hs-b, .hs > .tabs ~ .hs-b{bottom:14px}
+/* indikator memperbarui data di latar (tampilan dari cache) */
+#swrBar{position:fixed;left:0;right:0;top:0;height:3px;z-index:60;pointer-events:none;opacity:0;transition:opacity .2s;background:linear-gradient(90deg,transparent,var(--brand),transparent);background-size:40% 100%;background-repeat:no-repeat;animation:swr 1s linear infinite}
+#swrBar.on{opacity:1}
+@keyframes swr{from{background-position:-40% 0}to{background-position:140% 0}}
+.stale-note{font-size:12px;color:var(--ink-3);margin:-4px 0 8px;display:flex;gap:6px;align-items:center}
+
 /* ---------- Lampiran bukti pembayaran ---------- */
 .attp{border:1px dashed var(--line);border-radius:12px;padding:10px}
 .att-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(92px,1fr));gap:8px;margin-top:8px}
@@ -506,7 +521,7 @@ function RPOS_calcCart(cart, ctx) {
 <script>
 /* ===================== Retail POS Enterprise — Klien (inti) ===================== */
 'use strict';
-var APP_VERSION = '1.3.0';
+var APP_VERSION = '1.4.0';
 var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 
 /* ---------- Utilitas ---------- */
@@ -610,6 +625,8 @@ var ICONS = {
   refresh: '<path d="M21 12a9 9 0 1 1-2.6-6.4L21 8"/><path d="M21 3v5h-5"/>',
   chat: '<path d="M21 12a8.5 8.5 0 0 1-12.6 7.4L3 21l1.6-5.2A8.5 8.5 0 1 1 21 12z"/>',
   trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+  chevl: '<path d="m15 18-6-6 6-6"/>', chevr: '<path d="m9 18 6-6-6-6"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
   pause: '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
@@ -698,6 +715,7 @@ var st = {
 /* ---------- API (google.script.run atau fetch ke URL Apps Script) ---------- */
 function api(action, payload, opt) {
   opt = opt || {};
+  swrMarkWrite(action);
   var req = { action: action, token: st.token, payload: payload || {} };
   var p;
   if (IS_GAS) {
@@ -1207,12 +1225,123 @@ function go(v) {
   try { (VIEWS[v] || function () { el.innerHTML = '<div class="empty">Halaman tidak ditemukan</div>'; })(el); }
   catch (e) { el.innerHTML = '<div class="alert bad">' + esc(e.message) + '</div>'; console.error(e); }
 }
+/* ===================== Cache tampilan (stale-while-revalidate) =====================
+ * Pindah menu tidak lagi menunggu server Apps Script (±1–3 dtk): data terakhir langsung tampil,
+ * lalu diperbarui diam-diam. Setelah ada perubahan (simpan/jual/bayar), cache domain terkait
+ * tidak dipakai sampai data baru diterima, sehingga tidak pernah menampilkan data sebelum perubahan sendiri.
+ */
+var SWR_READ = /^(sales\.list|stock\.(list|ledger|reorder)|opname\.list|transfer\.list|po\.list|customers\.list|promos\.list|debt\.(list|payments)|report\.(daily|range)|shift\.list|finance\.journals|audit\.list|outlets\.list|users\.list)$/;
+var SWR_NOWRITE = /^(bootstrap|login|setup\.status|pin\.verify|sales\.get|opname\.get|debt\.party|attach\.(list|get)|photos\.(thumbs|full)|audit\.verify|shift\.report|report\.sendWa|backup\.now)$/;
+var SWR_REL = {
+  sync: 'sales stock shift report debt customers finance audit', shift: 'shift report finance audit', products: 'stock report audit', categories: 'stock',
+  stock: 'stock report finance audit debt po', opname: 'opname stock report finance audit', transfer: 'transfer stock audit', po: 'po stock debt finance audit',
+  customers: 'customers debt', promos: 'promos', debt: 'debt report finance audit customers', attach: 'debt audit', suppliers: 'debt po',
+  outlets: 'outlets', users: 'users audit', me: 'users audit', photos: 'stock'
+};
+var swr = { mem: {}, dirty: {}, busy: 0, saveT: null, MAX: 40 };
+function swrDomain(action) { return String(action).split('.')[0]; }
+function swrKey(action, payload) { return (st.user ? st.user.id : '') + '|' + action + '|' + JSON.stringify(payload || {}); }
+function swrMarkWrite(action) {
+  if (SWR_READ.test(action) || SWR_NOWRITE.test(action)) return;
+  var now = Date.now(), rel = SWR_REL[swrDomain(action)];
+  if (!rel) { swr.dirty.__all = now; return; }
+  rel.split(' ').forEach(function (d) { swr.dirty[d] = now; });
+}
+function swrUsable(action, e) {
+  if (!e) return false;
+  return e.t > (swr.dirty[swrDomain(action)] || 0) && e.t > (swr.dirty.__all || 0);
+}
+function swrSave() {
+  clearTimeout(swr.saveT);
+  swr.saveT = setTimeout(function () {
+    var keys = Object.keys(swr.mem).sort(function (a, b) { return swr.mem[b].t - swr.mem[a].t; });
+    keys.slice(swr.MAX).forEach(function (k) { delete swr.mem[k]; });
+    kv.set('swr', swr.mem);
+  }, 800);
+}
+function swrBar(d) {
+  swr.busy = Math.max(0, swr.busy + d);
+  var b = document.getElementById('swrBar');
+  if (!b) { b = document.createElement('div'); b.id = 'swrBar'; document.body.appendChild(b); }
+  b.classList.toggle('on', swr.busy > 0);
+}
+/** Seperti api() untuk data baca; janji yang dihasilkan membawa .swr = { key, cached, stale } */
+function apiSWR(action, payload, opt) {
+  var key = swrKey(action, payload), e = swr.mem[key];
+  var p = api(action, payload, opt).then(function (d) {
+    var j = JSON.stringify(d);
+    if (j.length < 400000) { swr.mem[key] = { t: Date.now(), d: d }; swrSave(); }
+    return d;
+  });
+  p.swr = { key: key, cached: e && swrUsable(action, e) ? e : null, stale: e || null };
+  return p;
+}
 function loadInto(el, promise, render) {
+  var c = promise.swr && promise.swr.cached;
+  var errBox = function (e) {
+    el.innerHTML = '<div class="empty">' + ic(e.network ? 'wifioff' : 'alert') + '<div>' + esc(e.network ? 'Fitur ini membutuhkan koneksi internet.' : e.message) + '</div><button class="btn mt" onclick="go(st.view)">' + ic('refresh') + 'Coba lagi</button></div>';
+  };
+  if (c) {
+    var shown = JSON.stringify(c.d);
+    render(c.d);
+    swrBar(1);
+    return promise.then(function (d) {
+      swrBar(-1);
+      if (!document.body.contains(el) || JSON.stringify(d) === shown) return;
+      if (el.contains(document.activeElement) && document.activeElement !== document.body) return;   // jangan ganggu yang sedang mengetik
+      var y = window.scrollY; render(d); window.scrollTo(0, y);
+    }, function (e) {
+      swrBar(-1);
+      if (e.network && document.body.contains(el)) el.insertAdjacentHTML('afterbegin', '<div class="stale-note">' + ic('wifioff', 'sm') + 'Offline — menampilkan data ' + fmtDT(new Date(c.t).toISOString()) + '</div>');
+    });
+  }
   el.innerHTML = '<div class="loading"><span class="spin"></span> Memuat…</div>';
   return promise.then(function (d) { render(d); }, function (e) {
-    el.innerHTML = '<div class="empty">' + ic(e.network ? 'wifioff' : 'alert') + '<div>' + esc(e.network ? 'Fitur ini membutuhkan koneksi internet.' : e.message) + '</div><button class="btn mt" onclick="go(st.view)">' + ic('refresh') + 'Coba lagi</button></div>';
+    var s = promise.swr && promise.swr.stale;
+    if (e.network && s && document.body.contains(el)) {   // offline: tampilkan data terakhir yang tersimpan
+      render(s.d);
+      el.insertAdjacentHTML('afterbegin', '<div class="stale-note">' + ic('wifioff', 'sm') + 'Offline — menampilkan data terakhir ' + fmtDT(new Date(s.t).toISOString()) + '</div>');
+      return;
+    }
+    errBox(e);
   });
 }
+
+/* ===================== Panah geser untuk tab/chip yang meluber ===================== */
+function enhanceScrollers() {
+  $$('.tabs:not([data-hs]),.chips:not([data-hs])').forEach(function (el) {
+    el.setAttribute('data-hs', '1');
+    var w = document.createElement('div'); w.className = 'hs';
+    el.parentNode.insertBefore(w, el); w.appendChild(el);
+    var l = document.createElement('button'), r = document.createElement('button');
+    l.type = r.type = 'button'; l.className = 'hs-b l'; r.className = 'hs-b r';
+    l.setAttribute('aria-label', 'Geser ke kiri'); r.setAttribute('aria-label', 'Geser ke kanan');
+    l.tabIndex = r.tabIndex = -1;
+    l.innerHTML = ic('chevl'); r.innerHTML = ic('chevr');
+    w.appendChild(l); w.appendChild(r);
+    var upd = function () {
+      var max = el.scrollWidth - el.clientWidth;
+      l.classList.toggle('on', el.scrollLeft > 2);
+      r.classList.toggle('on', el.scrollLeft < max - 2);
+      var tb = el.classList.contains('tabs') ? parseFloat(getComputedStyle(el).marginBottom) || 0 : 0;
+      l.style.bottom = r.style.bottom = tb + 'px';
+    };
+    var by = function (dir) { el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.7), behavior: 'smooth' }); };
+    l.onclick = function () { by(-1); }; r.onclick = function () { by(1); };
+    el.addEventListener('scroll', upd, { passive: true });
+    if (window.ResizeObserver) new ResizeObserver(upd).observe(el); else window.addEventListener('resize', upd);
+    // tab/chip aktif terlihat
+    var on = el.querySelector('.on');
+    if (on && on.offsetLeft + on.offsetWidth > el.clientWidth) el.scrollLeft = on.offsetLeft - 40;
+    upd();
+  });
+}
+(function () {
+  var q = false;
+  var mo = new MutationObserver(function () { if (q) return; q = true; requestAnimationFrame(function () { q = false; enhanceScrollers(); }); });
+  var startObs = function () { mo.observe(document.body, { childList: true, subtree: true }); enhanceScrollers(); };
+  if (document.body) startObs(); else document.addEventListener('DOMContentLoaded', startObs);
+})();
 
 function showSyncPanel() {
   var q = st.queue;
@@ -1236,6 +1365,7 @@ function showSyncPanel() {
 /* ---------- Mulai ---------- */
 function start() {
   applyTheme();
+  kv.get('swr').then(function (v) { if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { if (!swr.mem[k]) swr.mem[k] = v[k]; }); });
   Promise.all([kv.get('queue'), kv.get('held'), kv.get('shift'), kv.get('localSales'), kv.get('thumbs')]).then(function (r) {
     st.queue = r[0] || []; st.held = r[1] || []; st.shift = r[2] || null; st.localSales = r[3] || []; thumbs = r[4] || {};
     if (!IS_GAS && !st.device.apiUrl) return renderAuth('url');
@@ -2023,7 +2153,7 @@ VIEWS.history = function (el) {
     f.from = $('#hF').value; f.to = $('#hT').value; f.q = $('#hQ').value.trim(); f.method = $('#hM').value;
     var pending = st.localSales.filter(function (s) { return !s.synced && s.outletId === st.outletId; });
     var box = $('#hList');
-    loadInto(box, api('sales.list', { outletId: st.outletId, from: f.from, to: f.to, q: f.q, method: f.method }), function (rows) {
+    loadInto(box, apiSWR('sales.list', { outletId: st.outletId, from: f.from, to: f.to, q: f.q, method: f.method }), function (rows) {
       var html = '';
       if (pending.length) html += '<div class="alert warn mb">' + ic('wifioff', 'sm') + ' ' + pending.length + ' transaksi di perangkat ini belum tersinkron: ' + pending.slice(0, 6).map(function (s) { return '<a href="#" data-local="' + s.id + '">' + esc(s.receiptNo) + '</a>'; }).join(', ') + '</div>';
       var sum = rows.filter(function (r) { return r.status !== 'VOIDED'; }).reduce(function (a, r) { return a + Number(r.grandTotal) - Number(r.refundTotal || 0); }, 0);
@@ -2700,7 +2830,7 @@ VIEWS.stock = function (el) {
 };
 var STOCK_VIEWS = {};
 STOCK_VIEWS.balance = function (el) {
-  loadInto(el, api('stock.list', { outletId: st.outletId }), function (rows) {
+  loadInto(el, apiSWR('stock.list', { outletId: st.outletId }), function (rows) {
     var fil = 'ALL';
     var draw = function () {
       var list = rows.filter(function (r) { return fil === 'ALL' || r.status === fil; });
@@ -2725,7 +2855,7 @@ STOCK_VIEWS.balance = function (el) {
 STOCK_VIEWS.ledger = function (el) {
   el.innerHTML = '<div class="row wrap mb"><select class="input" id="lgP" style="max-width:320px">' + opts([{ id: 'ALL', name: 'Semua produk' }].concat(st.boot.products), 'ALL') + '</select><input class="input" type="date" id="lgF" value="' + dateAdd(today(), -30) + '" style="width:auto"><button class="btn primary" id="lgGo">Tampilkan</button></div><div id="lgB"></div>';
   var load = function () {
-    loadInto($('#lgB'), api('stock.ledger', { outletId: st.outletId, productId: $('#lgP').value, from: $('#lgF').value }), function (rows) {
+    loadInto($('#lgB'), apiSWR('stock.ledger', { outletId: st.outletId, productId: $('#lgP').value, from: $('#lgF').value }), function (rows) {
       $('#lgB').innerHTML = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Waktu</th><th>Produk</th><th>Jenis</th><th class="right">Mutasi</th><th class="right">Saldo</th><th>Referensi</th><th>Oleh</th></tr></thead><tbody>' + rows.map(function (r) {
         return '<tr><td>' + fmtDT(r.ts) + '</td><td>' + esc(r.productName) + '</td><td>' + esc(r.typeLabel) + '</td><td class="right num" style="color:' + (r.delta < 0 ? 'var(--bad)' : 'var(--ok)') + '">' + (r.delta > 0 ? '+' : '') + qtyFmt(r.delta) + '</td><td class="right num">' + qtyFmt(r.balanceAfter) + '</td><td class="mono" style="font-size:12px">' + esc(r.refId) + '<div class="faint" style="font-family:var(--font)">' + esc(r.notes) + '</div></td><td>' + esc(r.user) + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="empty">Tidak ada mutasi</div>';
@@ -2789,7 +2919,7 @@ STOCK_VIEWS.adjust = function (el) {
   };
 };
 STOCK_VIEWS.opname = function (el) {
-  loadInto(el, api('opname.list', { outletId: st.outletId }), function (rows) {
+  loadInto(el, apiSWR('opname.list', { outletId: st.outletId }), function (rows) {
     el.innerHTML = '<div class="row wrap mb"><button class="btn primary" id="opNew">' + ic('plus') + 'Mulai Opname</button><span class="faint" style="font-size:12.5px">Blind count: petugas tidak melihat stok sistem saat menghitung.</span></div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Dibuat</th><th>Status</th><th class="right">Selisih nilai</th><th>Disetujui</th></tr></thead><tbody>' + rows.map(function (o) {
         return '<tr class="click" data-id="' + o.id + '"><td class="mono">' + esc(o.opNo) + (o.blind === true || o.blind === 'TRUE' ? ' <span class="badge">blind</span>' : '') + '</td><td>' + fmtDT(o.createdAt) + '<div class="faint">' + esc(o.createdBy) + '</div></td><td><span class="badge ' + ({ APPROVED: 'ok', SUBMITTED: 'warn', IN_PROGRESS: 'info' }[o.status] || '') + '">' + esc(o.status) + '</span></td><td class="right num">' + rp(o.varianceValue) + '</td><td>' + esc(o.approvedBy || '-') + '</td></tr>';
@@ -2854,7 +2984,7 @@ function openOpname(o) {
 }
 STOCK_VIEWS.transfer = function (el) {
   if (!hasFeat('transfer')) { el.innerHTML = upsell('transfer'); return; }
-  loadInto(el, api('transfer.list', {}), function (rows) {
+  loadInto(el, apiSWR('transfer.list', {}), function (rows) {
     var others = st.boot.allOutlets.filter(function (o) { return o.id !== st.outletId; });
     el.innerHTML = '<div class="row mb"><button class="btn primary" id="trNew"' + (others.length ? '' : ' disabled') + '>' + ic('truck') + 'Ajukan Transfer Keluar</button>' + (others.length ? '' : '<span class="faint">Tambahkan outlet lain di Pengaturan › Outlet</span>') + '</div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No.</th><th>Rute</th><th>Item</th><th>Status</th><th>Dibuat</th></tr></thead><tbody>' + rows.map(function (t) {
@@ -2906,7 +3036,7 @@ function openTransfer(t) {
 }
 STOCK_VIEWS.po = function (el) {
   if (!hasFeat('po')) { el.innerHTML = upsell('po'); return; }
-  loadInto(el, api('po.list', {}), function (rows) {
+  loadInto(el, apiSWR('po.list', {}), function (rows) {
     el.innerHTML = '<div class="row wrap mb"><button class="btn primary" id="poNew">' + ic('plus') + 'Buat PO</button><button class="btn" id="supBtn">' + ic('users') + 'Supplier</button></div>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>No. PO</th><th>Supplier</th><th>Outlet</th><th class="right">Total</th><th>Status</th><th>Dibuat</th></tr></thead><tbody>' + rows.map(function (p) {
         return '<tr class="click" data-id="' + p.id + '"><td class="mono">' + esc(p.poNo) + '</td><td>' + esc(p.supplierName) + '</td><td>' + esc(outletName(p.outletId)) + '</td><td class="right num">' + rp(p.total) + '</td><td><span class="badge ' + ({ RECEIVED: 'ok', PARTIAL_RECEIVED: 'info', PENDING_APPROVAL: 'warn', APPROVED: 'info', REJECTED: 'bad' }[p.status] || '') + '">' + esc(p.status) + '</span></td><td>' + fmtDT(p.createdAt) + '</td></tr>';
@@ -2973,7 +3103,7 @@ function editSuppliers() {
   draw();
 }
 STOCK_VIEWS.reorder = function (el) {
-  loadInto(el, api('stock.reorder', { outletId: st.outletId, days: 14, coverDays: 14 }), function (rows) {
+  loadInto(el, apiSWR('stock.reorder', { outletId: st.outletId, days: 14, coverDays: 14 }), function (rows) {
     el.innerHTML = '<p class="muted" style="margin-top:0;font-size:13px">Dihitung dari rata-rata penjualan 14 hari terakhir untuk persediaan 14 hari + stok minimum.</p>' +
       (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th><input type="checkbox" id="roAll" checked></th><th>Produk</th><th class="right">Stok</th><th class="right">Terjual/hari</th><th class="right">Habis dalam</th><th class="right">Saran beli</th></tr></thead><tbody>' + rows.map(function (r) {
         return '<tr><td><input type="checkbox" data-p="' + r.productId + '" checked></td><td><b>' + esc(r.name) + '</b><div class="faint mono" style="font-size:11.5px">' + esc(r.sku) + '</div></td><td class="right">' + qtyFmt(r.qty) + '</td><td class="right">' + r.avgDaily + '</td><td class="right">' + (r.daysLeft === null ? '-' : r.daysLeft + ' hari') + '</td><td class="right"><input class="input right" style="width:90px;min-height:32px" type="number" data-q="' + r.productId + '" value="' + r.suggest + '"></td></tr>';
@@ -2999,7 +3129,7 @@ VIEWS.crm = function (el) {
   var body = $('#crmB');
   if (tab === 'member') {
     if (!hasFeat('member')) { body.innerHTML = upsell('member'); return; }
-    loadInto(body, api('customers.list', {}), function (rows) {
+    loadInto(body, apiSWR('customers.list', {}), function (rows) {
       var S = st.boot.settings;
       body.innerHTML = '<div class="alert mb" style="font-size:12.5px">' + ic('star', 'sm') + ' Aturan poin: 1 poin setiap belanja ' + rp(S.pointsPerRp) + ', 1 poin = ' + rp(S.pointValue) + ' saat ditukar. Ubah di Pengaturan › Pajak & Pembayaran.</div>' +
         '<div class="row wrap mb"><input class="input grow" id="cmQ" placeholder="Cari member"><button class="btn primary" id="cmNew">' + ic('plus') + 'Member</button>' + (hasFeat('export') ? '<button class="btn" id="cmExp">' + ic('download') + 'Ekspor</button>' : '') + '</div><div id="cmL"></div>';
@@ -3040,7 +3170,7 @@ VIEWS.crm = function (el) {
     });
   } else {
     if (!hasFeat('promo')) { body.innerHTML = upsell('promo'); return; }
-    loadInto(body, api('promos.list', {}), function (rows) {
+    loadInto(body, apiSWR('promos.list', {}), function (rows) {
       var T = st.boot.promoTypes;
       var pm = prodMap();
       body.innerHTML = '<div class="row mb">' + (can('promo.manage') ? '<button class="btn primary" id="prNew">' + ic('plus') + 'Promo</button>' : '') + '<span class="faint" style="font-size:12.5px">Satu baris hanya mendapat promo terbaik (tidak menumpuk). Promo tidak berlaku untuk harga nego.</span></div>' +
@@ -3100,7 +3230,7 @@ VIEWS.debts = function (el) {
   var body = $('#dbB');
   if (tab === 'PAY') return debtPaymentsView(body);
   var outs = (can('report.cross') && st.boot.outlets.length > 1 ? [{ id: 'ALL', name: 'Semua outlet' }] : []).concat(st.boot.outlets);
-  loadInto(body, api('debt.list', { kind: tab, outletId: f.outlet }), function (d) {
+  loadInto(body, apiSWR('debt.list', { kind: tab, outletId: f.outlet }), function (d) {
     var s = d.summary, max = Math.max(1, s.b0, s.b30, s.b60, s.b90, s.b90p);
     body.innerHTML =
       '<div class="kpis mb"><div class="kpi"><div class="l">Total ' + debtWord(tab) + ' terbuka</div><div class="v">' + rp(s.outstanding) + '</div><div class="s">' + s.docs + ' dokumen · ' + d.parties.length + ' ' + (tab === 'AR' ? 'pelanggan' : 'supplier') + '</div></div>' +
@@ -3159,19 +3289,60 @@ function debtPaymentsView(el) {
   el.innerHTML = '<div class="row wrap mb"><input class="input" type="date" id="dpF" value="' + f.from + '" style="width:auto"><input class="input" type="date" id="dpT" value="' + f.to + '" style="width:auto"><select class="input" id="dpK" style="width:auto">' + opts([{ id: 'ALL', name: 'Semua' }, { id: 'AR', name: 'Terima piutang' }, { id: 'AP', name: 'Bayar hutang' }], f.kind) + '</select><button class="btn primary" id="dpGo">Tampilkan</button></div><div id="dpL"></div>';
   var load = function () {
     f.from = $('#dpF').value; f.to = $('#dpT').value; f.kind = $('#dpK').value;
-    loadInto($('#dpL'), api('debt.payments', f), function (rows) {
+    loadInto($('#dpL'), apiSWR('debt.payments', f), function (rows) {
       var tin = rows.filter(function (r) { return r.kind === 'AR' && r.type === 'PAY'; }).reduce(function (a, r) { return a + Number(r.amount); }, 0);
       var tout = rows.filter(function (r) { return r.kind === 'AP' && r.type === 'PAY'; }).reduce(function (a, r) { return a + Number(r.amount); }, 0);
       var tl = { PAY: 'Bayar', ADJUST: 'Penyesuaian', RETURN: 'Retur' };
       $('#dpL').innerHTML = '<div class="kpis mb"><div class="kpi"><div class="l">Piutang diterima</div><div class="v" style="color:var(--ok)">' + rp(tin) + '</div></div><div class="kpi"><div class="l">Hutang dibayar</div><div class="v" style="color:var(--bad)">' + rp(tout) + '</div></div></div>' +
-        (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Waktu</th><th>No.</th><th>Jenis</th><th>Pihak</th><th>Metode</th><th class="right">Nominal</th><th>Oleh</th><th>Bukti</th></tr></thead><tbody>' + payGroups(rows).map(function (r, ri) {
-          return '<tr><td>' + fmtDT(r.ts) + '</td><td class="mono" style="font-size:12px">' + esc(r.docNo) + '</td><td><span class="badge ' + (r.kind === 'AR' ? 'ok' : 'warn') + '">' + (r.kind === 'AR' ? 'Piutang' : 'Hutang') + '</span> ' + (tl[r.type] || r.type) + '</td><td>' + esc(r.partyName) + '</td><td>' + esc(r.method) + (r.ref ? ' <span class="faint">' + esc(r.ref) + '</span>' : '') + '</td><td class="right num">' + rp(r.amount) + '</td><td>' + esc(r.user) + '</td><td>' + (r.type === 'PAY' ? '<button class="btn sm ' + (r.attCount ? '' : 'ghost') + '" data-pa="' + ri + '">' + ic('clip', 'sm') + (r.attCount || '+') + '</button>' : '') + '</td></tr>';
+        (rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Tgl bayar</th><th>No.</th><th>Jenis</th><th>Pihak</th><th>Metode</th><th class="right">Nominal</th><th>Oleh</th><th>Bukti</th></tr></thead><tbody>' + payGroups(rows).map(function (r, ri) {
+          return '<tr><td>' + payDateCell(r, ri) + '</td><td class="mono" style="font-size:12px">' + esc(r.docNo) + '</td><td><span class="badge ' + (r.kind === 'AR' ? 'ok' : 'warn') + '">' + (r.kind === 'AR' ? 'Piutang' : 'Hutang') + '</span> ' + (tl[r.type] || r.type) + '</td><td>' + esc(r.partyName) + '</td><td>' + esc(r.method) + (r.ref ? ' <span class="faint">' + esc(r.ref) + '</span>' : '') + '</td><td class="right num">' + rp(r.amount) + '</td><td>' + esc(r.user) + '</td><td>' + (r.type === 'PAY' ? '<button class="btn sm ' + (r.attCount ? '' : 'ghost') + '" data-pa="' + ri + '">' + ic('clip', 'sm') + (r.attCount || '+') + '</button>' : '') + '</td></tr>';
         }).join('') + '</tbody></table></div>' : '<div class="empty">Belum ada pembayaran</div>');
       var grp = payGroups(rows);
+      $$('[data-pd]', $('#dpL')).forEach(function (b) { b.onclick = function () { editPayDate(grp[Number(b.dataset.pd)]).then(function (ok) { if (ok) load(); }); }; });
       $$('[data-pa]', $('#dpL')).forEach(function (b) { b.onclick = function () { showPayAttachments(grp[Number(b.dataset.pa)], grp[Number(b.dataset.pa)].kind, load); }; });
     });
   };
   $('#dpGo').onclick = load; load();
+}
+
+/* ---------- Tanggal bayar ---------- */
+function dateOfIso(iso) { var p = dparts(iso); return p.year + '-' + p.month + '-' + p.day; }
+/** Batas paling awal: kasir 7 hari, Kepala Toko/Keuangan 400 hari; tidak sebelum tanggal dokumen (bila satu dokumen). */
+function payDateMin(o) {
+  var min = dateAdd(today(), can('debt.manage') ? -400 : -7);
+  var dd = o && o.docDate ? String(o.docDate).slice(0, 10) : '';
+  return dd && dd > min ? dd : min;
+}
+function payDateCell(p, i) {
+  var rec = p.ts ? dateOfIso(p.ts) : '', d = String(p.date || rec).slice(0, 10);
+  var editable = p.type === 'PAY' && !p.shiftId && can('debt.manage');
+  return '<span class="nowrap">' + (d === rec ? fmtDT(p.ts) : '<b>' + fmtD(d) + '</b>') + '</span>' +
+    (editable ? ' <button class="btn icon sm ghost" data-pd="' + i + '" title="Ubah tanggal bayar" aria-label="Ubah tanggal bayar">' + ic('edit', 'sm') + '</button>' : '') +
+    (d !== rec && rec ? '<div class="faint" style="font-size:11px">dicatat ' + fmtDT(p.ts) + '</div>' : '');
+}
+/** Ubah tanggal pembayaran yang sudah tercatat (jurnal ikut pindah, wajib alasan). */
+function editPayDate(p) {
+  return new Promise(function (resolve) {
+    var cur = String(p.date || dateOfIso(p.ts)).slice(0, 10);
+    var m = modal({
+      title: ic('calendar') + ' Ubah tanggal bayar',
+      body: '<div class="faint mb" style="font-size:12.5px">' + esc(p.docNo) + ' · ' + esc(p.partyName || '') + ' · ' + rp(p.amount) + '</div>' +
+        '<label class="f">Tanggal bayar<input class="input" type="date" id="pdD" value="' + cur + '" max="' + today() + '" min="' + dateAdd(today(), -400) + '"></label>' +
+        '<label class="f mt">Alasan perubahan<input class="input" id="pdR" placeholder="mis. transfer masuk tgl 3, baru dicek hari ini"></label>' +
+        '<div class="faint mt" style="font-size:12px">Jurnal pembayaran ikut berpindah tanggal; perubahan tercatat di log audit. Pembayaran tunai yang sudah masuk kas laci shift tidak dapat dipindah.</div>',
+      foot: '<button class="btn" data-close>Batal</button><button class="btn primary" id="pdOk">' + ic('check') + 'Simpan</button>',
+      onClose: function (v) { resolve(!!v); }
+    });
+    m.$('#pdOk').onclick = function () {
+      var d = m.$('#pdD').value, r = m.$('#pdR').value.trim();
+      if (!d) return toast('Pilih tanggal', 'bad');
+      if (!r) return toast('Isi alasan perubahan', 'bad');
+      run(m.$('#pdOk'), api('debt.payDate', { payId: p.payId, date: d, reason: r })).then(function (x) {
+        toast(x.unchanged ? 'Tanggal tidak berubah' : 'Tanggal bayar diubah ' + fmtD(x.old) + ' → ' + fmtD(x.date), 'ok');
+        m.close(true);
+      });
+    };
+  });
 }
 
 /** Satu pembayaran bisa dialokasikan ke beberapa dokumen (FIFO) → gabungkan per payId agar bukti tampil sekali. */
@@ -3209,7 +3380,7 @@ function openDebtParty(kind, partyId, partyName) {
           (can('debt.manage') ? '<td class="right">' + (open ? '<button class="btn sm" data-pay="' + x.id + '">Bayar</button> <button class="btn sm ghost" data-adj="' + x.id + '">' + (String(x.refType).indexOf('MANUAL') === 0 && !Number(x.paid) ? 'Batal/Sesuaikan' : 'Sesuaikan') + '</button>' : '') + '</td>' : '') + '</tr>';
       }).join('') + '</tbody></table></div>' +
       '<h3 class="mt">Riwayat pembayaran</h3>' + (d.pays.length ? '<div class="tbl-wrap"><table class="tbl"><tbody>' + payGroups(d.pays).map(function (p, pi) {
-        return '<tr><td>' + fmtDT(p.ts) + '</td><td class="mono" style="font-size:12px">' + esc(p.docNo) + '</td><td>' + esc({ PAY: 'Bayar', ADJUST: 'Penyesuaian', RETURN: 'Retur barang' }[p.type] || p.type) + ' · ' + esc(p.method) + (p.notes ? ' — ' + esc(p.notes) : '') + '</td><td class="right num">' + rp(p.amount) + '</td><td>' + esc(p.user) + '</td>' +
+        return '<tr><td>' + payDateCell(p, pi) + '</td><td class="mono" style="font-size:12px">' + esc(p.docNo) + '</td><td>' + esc({ PAY: 'Bayar', ADJUST: 'Penyesuaian', RETURN: 'Retur barang' }[p.type] || p.type) + ' · ' + esc(p.method) + (p.notes ? ' — ' + esc(p.notes) : '') + '</td><td class="right num">' + rp(p.amount) + '</td><td>' + esc(p.user) + '</td>' +
           '<td class="right">' + (p.type === 'PAY' ? attCell(p, pi) : '') + '</td></tr>';
       }).join('') + '</tbody></table></div>' : '<div class="faint">Belum ada pembayaran</div>');
     var foot = document.createElement('div'); foot.className = 'md-f';
@@ -3219,9 +3390,10 @@ function openDebtParty(kind, partyId, partyName) {
     m.el.querySelector('.md').appendChild(foot);
     var reopen = function () { m.close(); openDebtParty(kind, partyId, partyName); if (st.view === 'debts') VIEWS.debts($('#view')); };
     var pb = m.$('#dpPay'); if (pb) pb.onclick = function () { debtPayModal(kind, { partyId: partyId, partyName: d.partyName, outstanding: d.outstanding, phone: phone }).then(function (r) { if (r) reopen(); }); };
-    m.$$('[data-pay]').forEach(function (b) { b.onclick = function () { var x = d.docs.filter(function (y) { return y.id === b.dataset.pay; })[0]; debtPayModal(kind, { partyId: partyId, partyName: d.partyName, outstanding: x.balance, debtId: x.id, docNo: x.docNo, phone: phone }).then(function (r) { if (r) reopen(); }); }; });
+    m.$$('[data-pay]').forEach(function (b) { b.onclick = function () { var x = d.docs.filter(function (y) { return y.id === b.dataset.pay; })[0]; debtPayModal(kind, { partyId: partyId, partyName: d.partyName, outstanding: x.balance, debtId: x.id, docDate: x.date, docNo: x.docNo, phone: phone }).then(function (r) { if (r) reopen(); }); }; });
     m.$$('[data-adj]').forEach(function (b) { b.onclick = function () { debtAdjustModal(d.docs.filter(function (y) { return y.id === b.dataset.adj; })[0]).then(function (r) { if (r) reopen(); }); }; });
     var groups = payGroups(d.pays);
+    m.$$('[data-pd]').forEach(function (b) { b.onclick = function () { editPayDate(groups[Number(b.dataset.pd)]).then(function (ok) { if (ok) reopen(); }); }; });
     m.$$('[data-att]').forEach(function (b) { b.onclick = function () { showPayAttachments(groups[Number(b.dataset.att)], kind, reopen); }; });
     m.$$('[data-ati]').forEach(function (t) { t.onclick = function () { var g = groups[Number(t.dataset.ati)]; viewAttachment(g.atts[Number(t.dataset.k)]); }; });
     var wa = m.$('#dpWa');
@@ -3241,7 +3413,8 @@ function debtPayModal(kind, o) {
       body: '<div class="paytotal"><div class="l">' + esc(o.partyName) + (o.docNo ? ' · ' + esc(o.docNo) : '') + '</div><div class="v">' + rp(o.outstanding) + '</div><div class="faint" style="font-size:12px">sisa ' + debtWord(kind) + (o.docNo ? ' dokumen ini' : ' (dialokasikan ke dokumen tertua lebih dulu)') + '</div></div>' +
         '<label class="f">Nominal<input class="input big" id="dyA" inputmode="numeric" value="' + o.outstanding + '" autofocus></label>' +
         '<div class="quick mt"><button class="btn sm" data-p="1">Lunas</button><button class="btn sm" data-p="0.5">50%</button><button class="btn sm" data-p="0.25">25%</button></div>' +
-        '<label class="f mt">' + (kind === 'AR' ? 'Diterima via' : 'Dibayar dari') + '<select class="input" id="dyM">' + opts(methods.map(function (x) { return { id: x[0], name: x[1] }; }), 'CASH') + '</select></label>' +
+        '<div class="grid2 mt"><label class="f">' + (kind === 'AR' ? 'Diterima via' : 'Dibayar dari') + '<select class="input" id="dyM">' + opts(methods.map(function (x) { return { id: x[0], name: x[1] }; }), 'CASH') + '</select></label>' +
+        '<label class="f">Tanggal bayar<input class="input" type="date" id="dyDt" value="' + today() + '" max="' + today() + '" min="' + payDateMin(o) + '"></label></div>' +
         '<div class="faint" id="dyHint" style="font-size:12px;margin-top:4px"></div>' +
         '<div class="grid2 mt"><label class="f">No. referensi / bukti<input class="input" id="dyR"></label><label class="f">Catatan<input class="input" id="dyN"></label></div>' +
         '<div class="mt">' + attachPickerHtml() + '</div>',
@@ -3249,10 +3422,14 @@ function debtPayModal(kind, o) {
       onClose: function (v) { resolve(v || null); }
     });
     var hint = function () {
-      var cash = m.$('#dyM').value === 'CASH';
+      var cash = m.$('#dyM').value === 'CASH', dt = m.$('#dyDt').value;
+      if (dt && dt !== today()) {
+        m.$('#dyHint').innerHTML = '<span style="color:var(--warn)">' + ic('calendar', 'sm') + ' Tanggal mundur ' + fmtD(dt) + ': dicatat di jurnal &amp; laporan pada tanggal itu' + (cash ? ', <b>tidak</b> menambah/mengurangi kas laci shift sekarang' : '') + '. Tercatat di log audit.</span>';
+        return;
+      }
       m.$('#dyHint').innerHTML = cash ? (shiftHere ? 'Uang ' + (kind === 'AR' ? 'masuk ke' : 'diambil dari') + ' laci shift ' + esc(st.shift.register) + ' — tercatat di laporan shift.' : '<span style="color:var(--warn)">Tidak ada shift terbuka di perangkat ini; dicatat sebagai kas toko tanpa shift.</span>') : '';
     };
-    m.$('#dyM').onchange = hint; hint();
+    m.$('#dyM').onchange = hint; m.$('#dyDt').onchange = m.$('#dyDt').oninput = hint; hint();
     var picker = bindAttachPicker(m);
     m.$$('[data-p]').forEach(function (b) { b.onclick = function () { m.$('#dyA').value = Math.round(o.outstanding * Number(b.dataset.p)); }; });
     m.$('#dyOk').onclick = function () {
@@ -3262,13 +3439,17 @@ function debtPayModal(kind, o) {
       if (amt <= 0) return toast('Isi nominal', 'bad');
       if (amt > o.outstanding) return toast('Melebihi sisa ' + debtWord(kind) + ' ' + rp(o.outstanding), 'bad');
       var method = m.$('#dyM').value;
+      var payDate = m.$('#dyDt').value || today();
+      if (payDate > today()) return toast('Tanggal bayar tidak boleh melewati hari ini', 'bad');
+      if (payDate < payDateMin(o)) return toast('Tanggal bayar paling awal ' + fmtD(payDateMin(o)), 'bad');
+      var back = payDate !== today();
       var data = {
         id: uuid(), kind: kind, partyId: o.partyId || '', partyName: o.partyName, debtId: o.debtId || '', amount: amt, method: method,
-        ref: m.$('#dyR').value.trim(), notes: m.$('#dyN').value.trim(), outletId: st.outletId, shiftId: method === 'CASH' && shiftHere ? st.shift.id : '',
+        ref: m.$('#dyR').value.trim(), notes: m.$('#dyN').value.trim(), outletId: st.outletId, shiftId: method === 'CASH' && shiftHere && !back ? st.shift.id : '', date: payDate,
         ts: new Date().toISOString(), userName: st.user.fullName, docNo: kind === 'AR' ? nextKwitansiNo() : '', attCount: atts.length
       };
       var applyLocal = function () {
-        if (method === 'CASH' && shiftHere) {
+        if (method === 'CASH' && shiftHere && !back) {
           if (kind === 'AR') st.shift.cashIn = (Number(st.shift.cashIn) || 0) + amt; else st.shift.cashOut = (Number(st.shift.cashOut) || 0) + amt;
           kv.set('shift', st.shift);
         }
@@ -3305,7 +3486,7 @@ function kwitansiHtml(d, o) {
   var rest = Math.max(0, Number(o.outstanding) - Number(d.amount));
   var ml = { CASH: 'Tunai', TRANSFER: 'Transfer', QRIS: 'QRIS', DEBIT: 'Debit' };
   return '<div class="rcpt ' + w + '"><div class="c big">' + esc(S.storeName) + '</div><div class="c">' + esc(outlet().name || '') + '</div><hr><div class="c big">BUKTI PEMBAYARAN</div><hr><table>' +
-    '<tr><td>No</td><td class="r">' + esc(d.docNo) + '</td></tr><tr><td>Tgl</td><td class="r">' + fmtDT(d.ts) + '</td></tr><tr><td>Dari</td><td class="r">' + esc(o.partyName) + '</td></tr>' +
+    '<tr><td>No</td><td class="r">' + esc(d.docNo) + '</td></tr><tr><td>Tgl</td><td class="r">' + (d.date && d.date !== dateOfIso(d.ts) ? fmtD(d.date) + '</td></tr><tr><td>Dicatat</td><td class="r">' + fmtDT(d.ts) : fmtDT(d.ts)) + '</td></tr><tr><td>Dari</td><td class="r">' + esc(o.partyName) + '</td></tr>' +
     (o.docNo ? '<tr><td>Untuk</td><td class="r">' + esc(o.docNo) + '</td></tr>' : '') + '<tr><td>Via</td><td class="r">' + (ml[d.method] || d.method) + '</td></tr></table><hr><table>' +
     '<tr><td class="big">DIBAYAR</td><td class="r big">' + rp(d.amount, 1) + '</td></tr><tr><td>Sisa piutang</td><td class="r">' + rp(rest, 1) + '</td></tr></table><hr>' +
     '<div class="c">' + (rest ? 'Terima kasih atas pembayarannya.' : 'LUNAS — terima kasih!') + '</div><div class="c" style="margin-top:20px">Kasir: ' + esc(st.user.fullName) + '</div></div>';
@@ -3694,7 +3875,7 @@ REPORTS.daily = function (el) {
   var data = null;
   var load = function () {
     f.date = $('#rdD').value; f.outlet = $('#rdO').value;
-    loadInto($('#rdB'), api('report.daily', { date: f.date, outletId: f.outlet }), function (d) {
+    loadInto($('#rdB'), apiSWR('report.daily', { date: f.date, outletId: f.outlet }), function (d) {
       data = d;
       $('#rdB').innerHTML = kpiBlock(d) +
         '<div class="card mt"><div class="card-h"><h3>Jam sibuk</h3><span class="faint">' + tzLabel() + '</span></div>' + (d.hourly.length ? barChart(hourRange(d.hourly), 'v', 'h', rp) : '<div class="empty">-</div>') + '</div>' +
@@ -3723,7 +3904,7 @@ REPORTS.range = function (el) {
   el.innerHTML = '<div class="row wrap mb"><input class="input" type="date" id="rrF" value="' + f.from + '" style="width:auto"><input class="input" type="date" id="rrT" value="' + f.to + '" style="width:auto">' + outletPicker('rrO', f.outlet) + '<button class="btn primary" id="rrGo">Tampilkan</button></div><div id="rrB"></div>';
   var load = function () {
     f.from = $('#rrF').value; f.to = $('#rrT').value; f.outlet = $('#rrO').value;
-    loadInto($('#rrB'), api('report.range', { from: f.from, to: f.to, outletId: f.outlet }), function (d) {
+    loadInto($('#rrB'), apiSWR('report.range', { from: f.from, to: f.to, outletId: f.outlet }), function (d) {
       var margin = d.grossProfit !== undefined;
       $('#rrB').innerHTML = kpiBlock(d) + '<div class="card mt"><div class="card-h"><h3>Omzet harian</h3></div>' + barChart(d.series, 'omzet', 'date', rp) + '</div>' +
         (margin ? '<div class="card mt"><div class="card-h"><h3>Laba kotor harian</h3></div>' + barChart(d.series.map(function (s) { return { date: s.date, profit: Math.max(0, s.profit) }; }), 'profit', 'date', rp) + '</div>' : '') +
@@ -3736,7 +3917,7 @@ REPORTS.range = function (el) {
   $('#rrGo').onclick = load; load();
 };
 REPORTS.shift = function (el) {
-  loadInto(el, api('shift.list', { outletId: st.outletId, from: dateAdd(today(), -7) }), function (rows) {
+  loadInto(el, apiSWR('shift.list', { outletId: st.outletId, from: dateAdd(today(), -7) }), function (rows) {
     el.innerHTML = rows.length ? '<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Register</th><th>Kasir</th><th>Buka</th><th>Tutup</th><th class="right">Trx</th><th class="right">Kas seharusnya</th><th class="right">Fisik</th><th class="right">Selisih</th><th>Status</th></tr></thead><tbody>' + rows.map(function (s) {
       var d = Number(s.discrepancy) || 0;
       return '<tr class="click" data-id="' + s.id + '"><td>' + esc(s.register) + '</td><td>' + esc(s.cashierName) + '</td><td>' + fmtDT(s.openedAt) + '</td><td>' + (s.closedAt ? fmtDT(s.closedAt) : '-') + '</td><td class="right">' + (s.trxCount || 0) + '</td><td class="right num">' + rp(s.expectedCash) + '</td><td class="right num">' + (s.actualCash === '' ? '-' : rp(s.actualCash)) + '</td><td class="right num" style="color:' + (d < 0 ? 'var(--bad)' : (d > 0 ? 'var(--info)' : 'inherit')) + '">' + (s.status === 'OPEN' ? '-' : rp(d)) + '</td><td><span class="badge ' + (s.status === 'OPEN' ? 'ok' : '') + '">' + esc(s.status) + '</span></td></tr>';
@@ -3763,7 +3944,7 @@ REPORTS.journal = function (el) {
   el.innerHTML = '<div class="row wrap mb"><input class="input" type="date" id="rjF" value="' + f.from + '" style="width:auto"><input class="input" type="date" id="rjT" value="' + f.to + '" style="width:auto">' + outletPicker('rjO', f.outlet) + '<button class="btn primary" id="rjGo">Tampilkan</button></div><div id="rjB"></div>';
   var load = function () {
     f.from = $('#rjF').value; f.to = $('#rjT').value; f.outlet = $('#rjO').value;
-    loadInto($('#rjB'), api('finance.journals', { from: f.from, to: f.to, outletId: f.outlet }), function (d) {
+    loadInto($('#rjB'), apiSWR('finance.journals', { from: f.from, to: f.to, outletId: f.outlet }), function (d) {
       $('#rjB').innerHTML = '<div class="alert ' + (d.balanced ? 'ok' : 'bad') + ' mb">' + (d.balanced ? ic('check', 'sm') + ' Neraca saldo seimbang' : ic('alert', 'sm') + ' Neraca saldo TIDAK seimbang') + ' — Debit ' + rp(d.totalDebit) + ' · Kredit ' + rp(d.totalCredit) + '</div>' +
         '<div class="card"><div class="card-h"><h3>Neraca saldo</h3></div><div class="tbl-wrap"><table class="tbl"><thead><tr><th>Akun</th><th class="right">Debit</th><th class="right">Kredit</th><th class="right">Saldo</th></tr></thead><tbody>' + d.trial.map(function (a) { return '<tr><td class="mono">' + esc(a.account) + ' <span style="font-family:var(--font)">' + esc(a.name) + '</span></td><td class="right num">' + rp(a.debit) + '</td><td class="right num">' + rp(a.credit) + '</td><td class="right num"><b>' + rp(a.balance) + '</b></td></tr>'; }).join('') + '</tbody></table></div></div>' +
         '<div class="card mt"><div class="card-h"><h3>Jurnal umum</h3>' + (hasFeat('export') ? '<button class="btn sm" id="rjCsv">' + ic('download', 'sm') + 'Ekspor CSV</button>' : '') + '</div><div class="tbl-wrap" style="max-height:60vh"><table class="tbl"><thead><tr><th>Tanggal</th><th>Ref</th><th>Akun</th><th class="right">Debit</th><th class="right">Kredit</th><th>Memo</th></tr></thead><tbody>' + d.rows.map(function (r) { return '<tr><td>' + fmtD(r.date) + '</td><td class="mono" style="font-size:12px">' + esc(r.refType) + ' ' + esc(r.refId) + '</td><td>' + esc(r.account) + ' ' + esc(r.accountName) + '</td><td class="right num">' + (Number(r.debit) ? rp(r.debit) : '') + '</td><td class="right num">' + (Number(r.credit) ? rp(r.credit) : '') + '</td><td>' + esc(r.memo) + '</td></tr>'; }).join('') + '</tbody></table></div></div>';
@@ -3783,7 +3964,7 @@ VIEWS.audit = function (el) {
   var data = null;
   var load = function () {
     f.from = $('#auF').value; f.to = $('#auT').value; f.category = $('#auC').value; f.severity = $('#auS').value; f.q = $('#auQ').value;
-    loadInto($('#auB'), api('audit.list', f), function (d) {
+    loadInto($('#auB'), apiSWR('audit.list', f), function (d) {
       data = d;
       var sevB = { CRITICAL: 'bad', HIGH_VALUE: 'info', WARNING: 'warn', INFO: '' };
       $('#auB').innerHTML = '<div class="kpis mb"><div class="kpi"><div class="l">Total catatan</div><div class="v">' + d.stats.total + '</div></div><div class="kpi"><div class="l">Kritis</div><div class="v" style="color:var(--bad)">' + d.stats.CRITICAL + '</div></div><div class="kpi"><div class="l">Nilai tinggi</div><div class="v" style="color:var(--info)">' + d.stats.HIGH_VALUE + '</div></div><div class="kpi"><div class="l">Peringatan</div><div class="v" style="color:var(--warn)">' + d.stats.WARNING + '</div></div></div>' +
@@ -4019,7 +4200,7 @@ SETTINGS.outlets = function (el) {
     });
     m.$('#oOk').onclick = function () { var d = formData(m.$('#of')); d.id = o.id; run(m.$('#oOk'), api('outlets.save', d), 'Outlet disimpan').then(function (list) { m.close(); loadBoot('silent').then(function () { draw(list); }); }); };
   };
-  loadInto(el, api('outlets.list', {}), draw);
+  loadInto(el, apiSWR('outlets.list', {}), draw);
 };
 SETTINGS.users = function (el) {
   var roles = st.boot.roles;
@@ -4052,7 +4233,7 @@ SETTINGS.users = function (el) {
     m.$('#uOk').onclick = function () { save(null, m.$('#uOk')); };
     var c = m.$('#uClr'); if (c) c.onclick = function () { save({ clearPin: true }, c); };
   };
-  loadInto(el, api('users.list', {}), draw);
+  loadInto(el, apiSWR('users.list', {}), draw);
 };
 SETTINGS.device = function (el) {
   var d = st.device;
@@ -4149,7 +4330,7 @@ var LEGAL = {
   oss: ['Lisensi Pihak Ketiga',
     '<ul><li><b>JsBarcode</b> 3.11.6 — MIT License © Johan Lindell (dimuat dari cdnjs saat mencetak label).</li><li><b>ZXing JS (@zxing/library)</b> 0.21.3 — Apache License 2.0 (dimuat dari jsDelivr hanya bila browser tidak mendukung BarcodeDetector).</li><li>Ikon antarmuka digambar khusus untuk aplikasi ini.</li><li>Google Apps Script, Google Sheets, Google Drive — tunduk pada Ketentuan Layanan Google.</li></ul><p>Tidak ada kode dari versi React asli (React, Tailwind, lucide-react, motion, Express, Prisma) yang disertakan dalam edisi ini.</p>'],
   changelog: ['Riwayat Versi',
-    '<h3>v1.3.0 — 18 Oktober 2026</h3><ul><li>Hutang & Piutang: foto langsung (kamera) dan unggah dokumen (JPG/PNG/PDF) sebagai bukti pembayaran — tersimpan di Google Drive, bisa offline (antre), lihat/zoom/unduh, tambah bukti susulan, hapus tercatat di audit.</li><li>Navigasi bawah bisa diatur: urutan (seret/▲▼), menu yang tampil (maks 5 + Lainnya), posisi bar (bawah/melayang/atas), ikon saja atau dengan teks. Tekan lama bar untuk membuka pengaturan.</li></ul><h3>v1.2.1 — 16 Oktober 2026</h3><ul><li>PWA Android: manifest statis di halaman, service worker toleran berkas hilang, tombol "Instal aplikasi", pemeriksa kesiapan instal & panduan mengatasi "Aplikasi tidak dapat dibuka".</li></ul><h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
+    '<h3>v1.4.0 — 9 November 2026</h3><ul><li>Hutang & Piutang: input <b>tanggal bayar</b> (bisa tanggal mundur) saat bayar hutang/terima pembayaran; Kepala Toko/Keuangan dapat mengubah tanggal pembayaran yang sudah tercatat (jurnal ikut pindah, wajib alasan, tercatat di audit).</li><li>Pindah menu jauh lebih cepat: data terakhir langsung tampil dari perangkat lalu diperbarui di latar; saat offline menampilkan data terakhir.</li><li>Panah kecil ‹ › pada tab dan baris chip yang meluber ke samping.</li></ul><h3>v1.3.0 — 18 Oktober 2026</h3><ul><li>Hutang & Piutang: foto langsung (kamera) dan unggah dokumen (JPG/PNG/PDF) sebagai bukti pembayaran — tersimpan di Google Drive, bisa offline (antre), lihat/zoom/unduh, tambah bukti susulan, hapus tercatat di audit.</li><li>Navigasi bawah bisa diatur: urutan (seret/▲▼), menu yang tampil (maks 5 + Lainnya), posisi bar (bawah/melayang/atas), ikon saja atau dengan teks. Tekan lama bar untuk membuka pengaturan.</li></ul><h3>v1.2.1 — 16 Oktober 2026</h3><ul><li>PWA Android: manifest statis di halaman, service worker toleran berkas hilang, tombol "Instal aplikasi", pemeriksa kesiapan instal & panduan mengatasi "Aplikasi tidak dapat dibuka".</li></ul><h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
 };
 function showLegal(k) { var l = LEGAL[k]; modal({ title: l[0], size: 'wide', body: '<div class="legal">' + l[1] + '</div>' }); }
 
