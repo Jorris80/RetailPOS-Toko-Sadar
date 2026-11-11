@@ -729,7 +729,7 @@ function RPOS_calcCart(cart, ctx) {
 <script>
 /* ===================== Retail POS Enterprise — Klien (inti) ===================== */
 'use strict';
-var APP_VERSION = '1.5.0';
+var APP_VERSION = '1.5.1';
 var IS_GAS = typeof google !== 'undefined' && google.script && google.script.run;
 
 /* ---------- Utilitas ---------- */
@@ -4072,12 +4072,18 @@ function showPayAttachments(pay, kind, onChange) {
  */
 var LEAFLET_JS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
 var LEAFLET_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';
+// Semua lapisan TANPA API key. Catatan: sejak 25 Sep 2026 ubin raster CARTO (Voyager/Dark Matter) wajib API key,
+// karena itu tidak dipakai lagi. Esri = layanan peta dasar publik ArcGIS (server/services.arcgisonline.com).
+var ESRI = 'https://{s}.arcgisonline.com/ArcGIS/rest/services/';
 var MAP_TILES = {
-  voyager: { name: 'Peta', url: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', attr: '© OpenStreetMap · © CARTO', max: 20 },
-  osm: { name: 'OSM', url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© OpenStreetMap', max: 19 },
-  sat: { name: 'Satelit', url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: 'Citra © Esri', max: 19 },
-  dark: { name: 'Gelap', url: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', attr: '© OpenStreetMap · © CARTO', max: 20 }
+  osm: { name: 'Peta', url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', attr: '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>', max: 19, sub: '' },
+  street: { name: 'Jalan', url: ESRI + 'World_Street_Map/MapServer/tile/{z}/{y}/{x}', attr: 'Ubin © Esri', max: 19, sub: ['server', 'services'] },
+  sat: { name: 'Satelit', url: ESRI + 'World_Imagery/MapServer/tile/{z}/{y}/{x}', attr: 'Citra © Esri', max: 19, sub: ['server', 'services'],
+    labels: ESRI + 'Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}' },
+  dark: { name: 'Gelap', url: ESRI + 'Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', attr: 'Ubin © Esri', max: 19, nat: 16, sub: ['server', 'services'],
+    labels: ESRI + 'Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}' }
 };
+var MAP_LAYER_ALIAS = { voyager: 'osm' };   // pilihan lama yang tersimpan di perangkat
 var MAP_DEFAULT_CENTER = [-2.5, 117.5];   // Indonesia
 
 function mapLoad() {
@@ -4088,25 +4094,34 @@ function mapLoad() {
   return loadScript(LEAFLET_JS).then(function () { return L; });
 }
 
-/** Peta dengan pilihan lapisan (Peta / Satelit / OSM / Gelap). Pilihan diingat per perangkat. */
+/** Peta dengan pilihan lapisan (Peta OSM / Jalan / Satelit / Gelap), semuanya tanpa API key. Pilihan diingat per perangkat. */
 function mapCreate(el, opt) {
   opt = opt || {};
   var map = L.map(el, { zoomControl: false, attributionControl: true, tap: true, worldCopyJump: true }).setView(opt.center || MAP_DEFAULT_CENTER, opt.zoom || 5);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  var key = ls.get('mapLayer') || (dark ? 'dark' : 'voyager');
-  var cur = null;
-  var setLayer = function (k) {
-    if (!MAP_TILES[k]) k = 'voyager';
-    if (cur) map.removeLayer(cur);
+  var saved = ls.get('mapLayer');
+  var key = MAP_LAYER_ALIAS[saved] || saved || (dark ? 'dark' : 'osm');
+  var cur = [], osmFail = 0;
+  var setLayer = function (k, auto) {
+    if (!MAP_TILES[k]) k = 'osm';
+    cur.forEach(function (l) { map.removeLayer(l); }); cur = [];
     var t = MAP_TILES[k];
-    cur = L.tileLayer(t.url, { attribution: t.attr, maxZoom: t.max, subdomains: 'abcd', crossOrigin: true }).addTo(map);
-    key = k; ls.set('mapLayer', k);
+    var o = { attribution: t.attr, maxZoom: t.max, maxNativeZoom: t.nat || t.max, crossOrigin: true, referrerPolicy: 'strict-origin-when-cross-origin' };
+    if (t.sub) o.subdomains = t.sub;
+    var base = L.tileLayer(t.url, o).addTo(map); cur.push(base);
+    if (t.labels) cur.push(L.tileLayer(t.labels, Object.assign({}, o, { attribution: '' })).addTo(map));
+    if (k === 'osm') {
+      osmFail = 0;
+      // server OSM bisa menolak (kebijakan pemakaian ubin / jaringan memblokir) → pindah otomatis ke peta jalan Esri
+      base.on('tileerror', function () { if (++osmFail === 4 && key === 'osm') { setLayer('street', true); toast('Peta OpenStreetMap tidak dapat dimuat, beralih ke peta Esri', 'warn', 4000); } });
+    }
+    key = k; if (!auto) ls.set('mapLayer', k);
     $$('.map-layers [data-lay]', el.parentNode).forEach(function (b) { b.classList.toggle('on', b.dataset.lay === k); });
   };
   var ctl = document.createElement('div');
   ctl.className = 'map-layers';
-  ctl.innerHTML = ['voyager', 'sat', 'dark'].map(function (k) { return '<button type="button" data-lay="' + k + '">' + MAP_TILES[k].name + '</button>'; }).join('');
+  ctl.innerHTML = ['osm', 'street', 'sat', 'dark'].map(function (k) { return '<button type="button" data-lay="' + k + '">' + MAP_TILES[k].name + '</button>'; }).join('');
   el.parentNode.appendChild(ctl);
   $$('[data-lay]', ctl).forEach(function (b) { b.onclick = function () { setLayer(b.dataset.lay); }; });
   setLayer(key);
@@ -4951,7 +4966,7 @@ var LEGAL = {
   oss: ['Lisensi Pihak Ketiga',
     '<ul><li><b>JsBarcode</b> 3.11.6 — MIT License © Johan Lindell (dimuat dari cdnjs saat mencetak label).</li><li><b>ZXing JS (@zxing/library)</b> 0.21.3 — Apache License 2.0 (dimuat dari jsDelivr hanya bila browser tidak mendukung BarcodeDetector).</li><li>Ikon antarmuka digambar khusus untuk aplikasi ini.</li><li>Google Apps Script, Google Sheets, Google Drive — tunduk pada Ketentuan Layanan Google.</li></ul><p>Tidak ada kode dari versi React asli (React, Tailwind, lucide-react, motion, Express, Prisma) yang disertakan dalam edisi ini.</p>'],
   changelog: ['Riwayat Versi',
-    '<h3>v1.5.0 — 11 November 2026</h3><ul><li><b>Peta Outlet</b> interaktif: penanda tiap outlet, maptip berisi galeri foto yang bisa digeser & di-zoom, status buka/tutup, jam, kontak, rute Google Maps, omzet & stok menipis hari ini; pilih lokasi lewat pencarian alamat, tautan Google Maps, GPS, atau seret penanda; lapisan Peta/Satelit/Gelap.</li><li><b>Toko Online</b> (bisa diaktif/nonaktifkan): etalase publik tanpa login, keranjang, checkout, voucher (persen/nominal/gratis ongkir), ongkir ambil sendiri/kurir toko per km/ekspedisi (tabel zona atau Biteship), pembayaran transfer + kode unik, QRIS, COD, payment gateway (Midtrans), batas waktu bayar, lacak pesanan, chat pembeli–penjual, komplain/retur/refund dengan foto, ulasan bintang, program afiliasi, PPN & laporan pajak, label pengiriman.</li><li><b>Marketplace</b>: impor pesanan CSV/Excel Shopee, Tokopedia/TikTok Shop, Lazada, Blibli; pemetaan SKU; ekspor stok; sinkron API Shopee & TikTok Shop (beta). Semua pesanan online memotong stok outlet & masuk jurnal.</li></ul><h3>v1.4.0 — 9 November 2026</h3><ul><li>Hutang & Piutang: input <b>tanggal bayar</b> (bisa tanggal mundur) saat bayar hutang/terima pembayaran; Kepala Toko/Keuangan dapat mengubah tanggal pembayaran yang sudah tercatat (jurnal ikut pindah, wajib alasan, tercatat di audit).</li><li>Pindah menu jauh lebih cepat: data terakhir langsung tampil dari perangkat lalu diperbarui di latar; saat offline menampilkan data terakhir.</li><li>Panah kecil ‹ › pada tab dan baris chip yang meluber ke samping.</li></ul><h3>v1.3.0 — 18 Oktober 2026</h3><ul><li>Hutang & Piutang: foto langsung (kamera) dan unggah dokumen (JPG/PNG/PDF) sebagai bukti pembayaran — tersimpan di Google Drive, bisa offline (antre), lihat/zoom/unduh, tambah bukti susulan, hapus tercatat di audit.</li><li>Navigasi bawah bisa diatur: urutan (seret/▲▼), menu yang tampil (maks 5 + Lainnya), posisi bar (bawah/melayang/atas), ikon saja atau dengan teks. Tekan lama bar untuk membuka pengaturan.</li></ul><h3>v1.2.1 — 16 Oktober 2026</h3><ul><li>PWA Android: manifest statis di halaman, service worker toleran berkas hilang, tombol "Instal aplikasi", pemeriksa kesiapan instal & panduan mengatasi "Aplikasi tidak dapat dibuka".</li></ul><h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
+    '<h3>v1.5.1 — 11 November 2026</h3><ul><li>Perbaikan peta: lapisan <b>Peta</b> dan <b>Gelap</b> menampilkan "API KEY REQUIRED" karena penyedia ubin CARTO mewajibkan API key sejak 25 September 2026. Kini memakai OpenStreetMap (Peta), Esri (Jalan, Satelit berlabel, Gelap berlabel) — semuanya tanpa API key. Bila server OSM menolak, peta otomatis pindah ke Esri.</li></ul><h3>v1.5.0 — 11 November 2026</h3><ul><li><b>Peta Outlet</b> interaktif: penanda tiap outlet, maptip berisi galeri foto yang bisa digeser & di-zoom, status buka/tutup, jam, kontak, rute Google Maps, omzet & stok menipis hari ini; pilih lokasi lewat pencarian alamat, tautan Google Maps, GPS, atau seret penanda; lapisan Peta/Satelit/Gelap.</li><li><b>Toko Online</b> (bisa diaktif/nonaktifkan): etalase publik tanpa login, keranjang, checkout, voucher (persen/nominal/gratis ongkir), ongkir ambil sendiri/kurir toko per km/ekspedisi (tabel zona atau Biteship), pembayaran transfer + kode unik, QRIS, COD, payment gateway (Midtrans), batas waktu bayar, lacak pesanan, chat pembeli–penjual, komplain/retur/refund dengan foto, ulasan bintang, program afiliasi, PPN & laporan pajak, label pengiriman.</li><li><b>Marketplace</b>: impor pesanan CSV/Excel Shopee, Tokopedia/TikTok Shop, Lazada, Blibli; pemetaan SKU; ekspor stok; sinkron API Shopee & TikTok Shop (beta). Semua pesanan online memotong stok outlet & masuk jurnal.</li></ul><h3>v1.4.0 — 9 November 2026</h3><ul><li>Hutang & Piutang: input <b>tanggal bayar</b> (bisa tanggal mundur) saat bayar hutang/terima pembayaran; Kepala Toko/Keuangan dapat mengubah tanggal pembayaran yang sudah tercatat (jurnal ikut pindah, wajib alasan, tercatat di audit).</li><li>Pindah menu jauh lebih cepat: data terakhir langsung tampil dari perangkat lalu diperbarui di latar; saat offline menampilkan data terakhir.</li><li>Panah kecil ‹ › pada tab dan baris chip yang meluber ke samping.</li></ul><h3>v1.3.0 — 18 Oktober 2026</h3><ul><li>Hutang & Piutang: foto langsung (kamera) dan unggah dokumen (JPG/PNG/PDF) sebagai bukti pembayaran — tersimpan di Google Drive, bisa offline (antre), lihat/zoom/unduh, tambah bukti susulan, hapus tercatat di audit.</li><li>Navigasi bawah bisa diatur: urutan (seret/▲▼), menu yang tampil (maks 5 + Lainnya), posisi bar (bawah/melayang/atas), ikon saja atau dengan teks. Tekan lama bar untuk membuka pengaturan.</li></ul><h3>v1.2.1 — 16 Oktober 2026</h3><ul><li>PWA Android: manifest statis di halaman, service worker toleran berkas hilang, tombol "Instal aplikasi", pemeriksa kesiapan instal & panduan mengatasi "Aplikasi tidak dapat dibuka".</li></ul><h3>v1.2.0 — 15 Oktober 2026</h3><ul><li>Hutang & Piutang: jual tempo/kasbon di kasir dengan limit & termin per member, terima bayar kasbon dari kasir (bisa offline), hutang supplier otomatis dari terima barang & PO, bayar dari kas laci/bank, kartu & umur hutang-piutang, tagih via WA, kwitansi, jurnal otomatis.</li></ul><h3>v1.1.0 — 14 Oktober 2026</h3><ul><li>Foto produk: unggah/ambil dari kamera, zoom (cubit, scroll, ketuk ganda), tombol sembunyikan foto, thumbnail tersimpan untuk offline.</li><li>Login lebih cepat: formulir tampil seketika, login + data dalam satu permintaan, aplikasi langsung terbuka dari data tersimpan lalu diperbarui di latar belakang.</li></ul><h3>v1.0.1 — 14 Oktober 2026</h3><ul><li>Daftar satuan produk bisa ditambah/dihapus (pilih "+ Satuan baru…" atau tombol Satuan di halaman Produk).</li></ul><h3>v1.0.0 — 14 Oktober 2026</h3><ul><li>Konversi penuh dari prototipe React/Express (data di memori) ke Google Apps Script + Google Sheets.</li><li>Kasir offline-first dengan antrean sinkron idempoten, PWA GitHub Pages.</li><li>Promo terkonfigurasi, member & poin, retur sebagian, saran restock, impor CSV, label barcode A4, struk digital via WhatsApp.</li><li>Keamanan: hash kata sandi & PIN, token HMAC, kunci akun, otorisasi ditegakkan di server, audit berantai.</li></ul>']
 };
 function showLegal(k) { var l = LEGAL[k]; modal({ title: l[0], size: 'wide', body: '<div class="legal">' + l[1] + '</div>' }); }
 

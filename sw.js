@@ -1,6 +1,6 @@
 /* Retail POS Enterprise — Service Worker (mode offline PWA)
  * Naikkan VERSION setiap kali index.html diperbarui agar perangkat kasir mengambil versi baru. */
-var VERSION = 'rpos-v1.5.0';
+var VERSION = 'rpos-v1.5.1';
 /* hanya hapus cache milik aplikasi ini — aplikasi lain di domain github.io yang sama tidak tersentuh */
 var CACHE_PREFIX = 'rpos-v';
 var SHELL = ['./', './index.html', './manifest.json', './offline.html', './icon-512.png'];
@@ -18,7 +18,7 @@ self.addEventListener('install', function (e) {
 
 self.addEventListener('activate', function (e) {
   e.waitUntil(caches.keys().then(function (keys) {
-    return Promise.all(keys.filter(function (k) { return k.indexOf(CACHE_PREFIX) === 0 && k !== VERSION; }).map(function (k) { return caches.delete(k); }));
+    return Promise.all(keys.filter(function (k) { return (k.indexOf(CACHE_PREFIX) === 0 && k !== VERSION) || k === 'rpos-tiles'; }).map(function (k) { return caches.delete(k); }));
   }).then(function () { return self.clients.claim(); }));
 });
 
@@ -38,9 +38,9 @@ self.addEventListener('fetch', function (e) {
     }));
     return;
   }
-  // ubin peta (CARTO/OSM/Esri): cache terpisah, dibatasi ±600 ubin agar memori perangkat aman
-  if (/basemaps\.cartocdn\.com|tile\.openstreetmap\.org|arcgisonline\.com/.test(url.hostname)) {
-    e.respondWith(caches.open('rpos-tiles').then(function (c) {
+  // ubin peta (OSM/Esri): cache terpisah, dibatasi ±600 ubin agar memori perangkat aman
+  if (/tile\.openstreetmap\.org|arcgisonline\.com/.test(url.hostname)) {
+    e.respondWith(caches.open('rpos-tiles-2').then(function (c) {
       return c.match(req).then(function (hit) {
         if (hit) return hit;
         return fetch(req).then(function (r) {
